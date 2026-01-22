@@ -49,7 +49,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
         // --- Ikon SVG Components ---
         const IconCamera = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></svg>;
@@ -60,11 +60,157 @@
         const IconCalendar = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
         const IconTag = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>;
         const IconLoader = () => <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>;
+        const IconClose = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+        const IconCameraLens = () => <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" strokeWidth="0"><circle cx="12" cy="12" r="10" /></svg>;
+
+        // --- KOMPONEN KAMERA KHUSUS DENGAN CROP GUIDE ---
+        const CameraModal = ({ onCapture, onClose }) => {
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const [isStreamReady, setIsStreamReady] = useState(false);
+
+            useEffect(() => {
+                let stream = null;
+                const startCamera = async () => {
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({
+                            video: {
+                                facingMode: 'environment', // Kamera Belakang
+                                width: { ideal: 1920 }, // Minta resolusi tinggi
+                                height: { ideal: 1080 }
+                            }
+                        });
+                        if (videoRef.current) {
+                            videoRef.current.srcObject = stream;
+                            videoRef.current.onloadedmetadata = () => {
+                                setIsStreamReady(true);
+                                videoRef.current.play();
+                            };
+                        }
+                    } catch (err) {
+                        console.error("Gagal akses kamera:", err);
+                        alert("Tidak dapat mengakses kamera. Pastikan izin diberikan.");
+                        onClose();
+                    }
+                };
+
+                startCamera();
+
+                return () => {
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                    }
+                };
+            }, [onClose]);
+
+            const takePhoto = () => {
+                if (!videoRef.current || !canvasRef.current) return;
+
+                const video = videoRef.current;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+
+                // Dimensi asli video
+                const videoWidth = video.videoWidth;
+                const videoHeight = video.videoHeight;
+
+                // Dimensi tampilan di layar (untuk hitung rasio crop)
+                const videoRect = video.getBoundingClientRect();
+                
+                // --- LOGIKA CROP ---
+                // Kita asumsikan kotak panduan ada di tengah layar dengan margin tertentu
+                // Sesuaikan logika ini dengan CSS .guide-box di bawah
+                const guideBox = document.getElementById('guide-box').getBoundingClientRect();
+
+                // Hitung skala antara video asli vs tampilan layar
+                const scaleX = videoWidth / videoRect.width;
+                const scaleY = videoHeight / videoRect.height;
+                // Gunakan skala terbesar agar aman (cover) atau sesuai implementasi object-fit
+                // Karena object-fit: cover, kita perlu hitung offset jika aspect ratio beda
+                
+                // Sederhananya: Kita capture seluruh frame dulu ke canvas sementara
+                canvas.width = videoWidth;
+                canvas.height = videoHeight;
+                ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
+
+                // Lalu kita crop bagian tengah sesuai rasio guide box
+                // Guide box kira-kira 80% lebar dan rasio A4 vertikal
+                const cropWidth = videoWidth * 0.8; 
+                const cropHeight = cropWidth * 1.414; // Rasio A4
+                const cropX = (videoWidth - cropWidth) / 2;
+                const cropY = (videoHeight - cropHeight) / 2;
+
+                // Buat canvas hasil crop
+                const cropCanvas = document.createElement('canvas');
+                cropCanvas.width = cropWidth;
+                cropCanvas.height = cropHeight;
+                const cropCtx = cropCanvas.getContext('2d');
+
+                cropCtx.drawImage(
+                    canvas, 
+                    cropX, cropY, cropWidth, cropHeight, // Source coords
+                    0, 0, cropWidth, cropHeight // Dest coords
+                );
+
+                const imageDataUrl = cropCanvas.toDataURL('image/jpeg', 0.9);
+                onCapture(imageDataUrl);
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black z-50 flex flex-col">
+                    {/* Video Area */}
+                    <div className="relative flex-1 bg-black overflow-hidden flex items-center justify-center">
+                        <video 
+                            ref={videoRef} 
+                            className="absolute min-w-full min-h-full object-cover" 
+                            playsInline 
+                            muted
+                        />
+                        
+                        {/* Overlay Gelap */}
+                        <div className="absolute inset-0 bg-black/40"></div>
+
+                        {/* Guide Box (Area Bening) */}
+                        {/* ID digunakan untuk referensi posisi logic jika perlu, tapi disini kita pakai hardcoded rasio center */}
+                        <div id="guide-box" className="absolute border-2 border-green-400 rounded-lg shadow-[0_0_0_1000px_rgba(0,0,0,0.5)] w-[80%] aspect-[1/1.414] z-10 flex flex-col items-center justify-center">
+                            <p className="text-green-400 text-xs font-bold bg-black/50 px-2 py-1 rounded mt-[-30px]">Paskan Dokumen Disini</p>
+                            <div className="absolute top-0 left-0 w-4 h-4 border-l-4 border-t-4 border-green-400 -ml-1 -mt-1"></div>
+                            <div className="absolute top-0 right-0 w-4 h-4 border-r-4 border-t-4 border-green-400 -mr-1 -mt-1"></div>
+                            <div className="absolute bottom-0 left-0 w-4 h-4 border-l-4 border-b-4 border-green-400 -ml-1 -mb-1"></div>
+                            <div className="absolute bottom-0 right-0 w-4 h-4 border-r-4 border-b-4 border-green-400 -mr-1 -mb-1"></div>
+                        </div>
+
+                        {/* Loading jika stream belum siap */}
+                        {!isStreamReady && <div className="absolute z-20 text-white flex flex-col items-center"><IconLoader /> <span className="text-sm mt-2">Membuka Kamera...</span></div>}
+                    </div>
+
+                    {/* Controls */}
+                    <div className="h-24 bg-black flex items-center justify-around px-6">
+                        <button onClick={onClose} className="p-3 rounded-full bg-gray-800 text-white">
+                            <IconClose />
+                        </button>
+                        
+                        <button 
+                            onClick={takePhoto} 
+                            disabled={!isStreamReady}
+                            className="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center bg-transparent active:bg-white/20 transition-all"
+                        >
+                            <div className="w-12 h-12 bg-white rounded-full"></div>
+                        </button>
+                        
+                        <div className="w-10"></div> {/* Spacer balance */}
+                    </div>
+                    
+                    <canvas ref={canvasRef} className="hidden"></canvas>
+                </div>
+            );
+        };
 
         const ScannerApp = () => {
             const [image, setImage] = useState(null);
             const [isProcessing, setIsProcessing] = useState(false);
             const [progress, setProgress] = useState(0);
+            const [showCamera, setShowCamera] = useState(false); // State untuk kamera in-app
             
             // Data Form
             const [extractedData, setExtractedData] = useState({
@@ -79,6 +225,13 @@
             ];
 
             const categories = ["MI", "PASIR", "SLAG"];
+
+            // Fungsi menerima hasil foto dari CameraModal
+            const handleCameraCapture = (imgDataUrl) => {
+                setImage(imgDataUrl);
+                setShowCamera(false);
+                processImage(imgDataUrl);
+            };
 
             const handleImageUpload = (e) => {
                 const file = e.target.files[0];
@@ -103,8 +256,31 @@
                 setExtractedData(prev => ({ ...prev, noSuratJalan: '' }));
 
                 try {
+                    // --- OPTIMISASI SPEED: Resize Gambar ---
+                    const img = new Image();
+                    img.src = imgData;
+                    await new Promise(r => img.onload = r);
+
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    const MAX_WIDTH = 1024; 
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    const optimizedImgData = canvas.toDataURL('image/jpeg', 0.8);
+
                     const result = await Tesseract.recognize(
-                        imgData,
+                        optimizedImgData,
                         'ind', 
                         {
                             logger: m => {
@@ -129,15 +305,23 @@
 
             const parseText = (text) => {
                 let newNoSuratJalan = '';
-                // Regex Pattern yang lebih fleksibel
-                const sjPattern = /(?:No\.?|Nomor)\s*(?:SJ|Surat\s*Jalan|Faktur|Ref)[:\.]?\s*([\w\/\.-]+)/i;
-                const sjMatch = text.match(sjPattern);
                 
-                if (sjMatch) {
-                    newNoSuratJalan = sjMatch[1].trim();
+                // 1. PRIORITAS UTAMA: Deteksi "SDO-MKI"
+                const sdoMatch = text.match(/(SDO-MKI[A-Z0-9\-\/]+)/i);
+
+                if (sdoMatch) {
+                    newNoSuratJalan = sdoMatch[1].trim();
+                } else {
+                    // 2. Jika SDO-MKI tidak ada, cari pola "No SJ" biasa
+                    const sjPattern = /(?:No\.?|Nomor)\s*(?:SJ|Surat\s*Jalan|Faktur|Ref)[:\.]?\s*([\w\/\.-]+)/i;
+                    const sjMatch = text.match(sjPattern);
+                    
+                    if (sjMatch) {
+                        newNoSuratJalan = sjMatch[1].trim();
+                    }
                 }
 
-                // Fallback: cari pola umum SJ (misal SJ-123 atau 123/ABC/2024) jika label "No SJ" tidak terbaca
+                // 3. Fallback: cari pola umum SJ
                 if (!newNoSuratJalan) {
                     const strictCode = /(SJ-[\d\w]+|\d{3,}\/[A-Z]+\/\d{4})/i;
                     const match = text.match(strictCode);
@@ -155,22 +339,18 @@
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
 
-                // Judul
                 doc.setFontSize(18);
                 doc.text("Arsip Digital Surat Jalan", 20, 20);
                 
-                // Data
                 doc.setFontSize(12);
                 doc.text(`Kategori        : ${extractedData.kategori}`, 20, 35);
                 doc.text(`Bulan           : ${extractedData.bulan}`, 20, 42);
                 doc.text(`No. Surat Jalan : ${extractedData.noSuratJalan || '-'}`, 20, 49);
 
-                // Gambar
                 if (image) {
                     const imgProps = doc.getImageProperties(image);
                     const pdfWidth = doc.internal.pageSize.getWidth();
                     
-                    // Hitung skala agar gambar pas di A4
                     const finalWidth = pdfWidth - 40;
                     const finalHeight = (imgProps.height * finalWidth) / imgProps.width;
 
@@ -178,7 +358,6 @@
                     doc.addImage(image, 'JPEG', 20, 70, finalWidth, finalHeight);
                 }
 
-                // Nama File
                 const fileName = extractedData.noSuratJalan 
                     ? `${extractedData.noSuratJalan.replace(/[^a-zA-Z0-9\-_]/g, '_')}.pdf` 
                     : 'Surat_Jalan_Scan.pdf';
@@ -192,6 +371,14 @@
 
             return (
                 <div className="min-h-screen p-4 pb-20 max-w-lg mx-auto">
+                    {/* MODAL KAMERA */}
+                    {showCamera && (
+                        <CameraModal 
+                            onCapture={handleCameraCapture} 
+                            onClose={() => setShowCamera(false)} 
+                        />
+                    )}
+
                     <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
                         
                         {/* Header */}
@@ -248,18 +435,25 @@
                                 {!image ? (
                                     <div className="flex flex-col items-center justify-center w-full min-h-[12rem] border-2 border-blue-300 border-dashed rounded-lg bg-blue-50 p-4 gap-4">
                                         
-                                        {/* Tombol Kamera Langsung */}
-                                        <label className="flex flex-col items-center justify-center w-full py-8 bg-white rounded-xl shadow-sm border border-blue-200 cursor-pointer hover:bg-blue-50 active:scale-95 transition-all">
+                                        {/* Tombol Kamera Scan Langsung (Membuka CameraModal) */}
+                                        <button 
+                                            onClick={() => setShowCamera(true)}
+                                            className="flex flex-col items-center justify-center w-full py-8 bg-white rounded-xl shadow-sm border border-blue-200 cursor-pointer hover:bg-blue-50 active:scale-95 transition-all"
+                                        >
                                             <div className="w-12 h-12 mb-3 text-blue-600">
                                                 <IconCamera />
                                             </div>
-                                            <span className="text-lg font-bold text-blue-700">Ambil Foto</span>
-                                            <p className="text-xs text-gray-400 mt-1">Kamera Belakang</p>
+                                            <span className="text-lg font-bold text-blue-700">Scan Dokumen</span>
+                                            <p className="text-xs text-gray-400 mt-1">Gunakan Kamera & Crop Otomatis</p>
+                                        </button>
+
+                                        {/* Opsional: Upload File Biasa (Backup) */}
+                                        <label className="text-xs text-blue-500 underline cursor-pointer p-2">
+                                            Upload file manual (Tanpa Crop)
                                             <input 
                                                 type="file" 
                                                 className="hidden" 
                                                 accept="image/*" 
-                                                capture="environment"
                                                 onChange={handleImageUpload} 
                                             />
                                         </label>
@@ -310,7 +504,7 @@
                                         type="text" 
                                         value={extractedData.noSuratJalan}
                                         onChange={(e) => handleInputChange('noSuratJalan', e.target.value)}
-                                        placeholder="Contoh: SJ-001/XII/2024"
+                                        placeholder="Contoh: SDO-MKI-12345"
                                         className={`w-full p-3 rounded-lg border outline-none transition-all focus:ring-2 focus:ring-blue-500 text-lg ${extractedData.noSuratJalan ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}
                                     />
                                 </div>
