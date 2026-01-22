@@ -63,7 +63,7 @@
         const IconClose = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
         const IconCameraLens = () => <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" strokeWidth="0"><circle cx="12" cy="12" r="10" /></svg>;
 
-        // --- KOMPONEN KAMERA KHUSUS DENGAN CROP GUIDE ---
+        // --- KOMPONEN KAMERA KHUSUS DENGAN CROP GUIDE LANDSCAPE ---
         const CameraModal = ({ onCapture, onClose }) => {
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
@@ -117,26 +117,20 @@
                 // Dimensi tampilan di layar (untuk hitung rasio crop)
                 const videoRect = video.getBoundingClientRect();
                 
-                // --- LOGIKA CROP ---
+                // --- LOGIKA CROP LANDSCAPE ---
                 // Kita asumsikan kotak panduan ada di tengah layar dengan margin tertentu
-                // Sesuaikan logika ini dengan CSS .guide-box di bawah
                 const guideBox = document.getElementById('guide-box').getBoundingClientRect();
 
-                // Hitung skala antara video asli vs tampilan layar
-                const scaleX = videoWidth / videoRect.width;
-                const scaleY = videoHeight / videoRect.height;
-                // Gunakan skala terbesar agar aman (cover) atau sesuai implementasi object-fit
-                // Karena object-fit: cover, kita perlu hitung offset jika aspect ratio beda
-                
-                // Sederhananya: Kita capture seluruh frame dulu ke canvas sementara
+                // Kita capture seluruh frame dulu
                 canvas.width = videoWidth;
                 canvas.height = videoHeight;
                 ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
 
-                // Lalu kita crop bagian tengah sesuai rasio guide box
-                // Guide box kira-kira 80% lebar dan rasio A4 vertikal
-                const cropWidth = videoWidth * 0.8; 
-                const cropHeight = cropWidth * 1.414; // Rasio A4
+                // Hitung rasio crop untuk LANDSCAPE (A4 Landscape ~ 1.414 : 1)
+                // Lebar diambil 90% dari lebar video (agar lebih lebar)
+                const cropWidth = videoWidth * 0.9; 
+                const cropHeight = cropWidth / 1.414; // Rasio Landscape
+                
                 const cropX = (videoWidth - cropWidth) / 2;
                 const cropY = (videoHeight - cropHeight) / 2;
 
@@ -168,16 +162,22 @@
                         />
                         
                         {/* Overlay Gelap */}
-                        <div className="absolute inset-0 bg-black/40"></div>
+                        <div className="absolute inset-0 bg-black/50"></div>
 
-                        {/* Guide Box (Area Bening) */}
-                        {/* ID digunakan untuk referensi posisi logic jika perlu, tapi disini kita pakai hardcoded rasio center */}
-                        <div id="guide-box" className="absolute border-2 border-green-400 rounded-lg shadow-[0_0_0_1000px_rgba(0,0,0,0.5)] w-[80%] aspect-[1/1.414] z-10 flex flex-col items-center justify-center">
-                            <p className="text-green-400 text-xs font-bold bg-black/50 px-2 py-1 rounded mt-[-30px]">Paskan Dokumen Disini</p>
-                            <div className="absolute top-0 left-0 w-4 h-4 border-l-4 border-t-4 border-green-400 -ml-1 -mt-1"></div>
-                            <div className="absolute top-0 right-0 w-4 h-4 border-r-4 border-t-4 border-green-400 -mr-1 -mt-1"></div>
-                            <div className="absolute bottom-0 left-0 w-4 h-4 border-l-4 border-b-4 border-green-400 -ml-1 -mb-1"></div>
-                            <div className="absolute bottom-0 right-0 w-4 h-4 border-r-4 border-b-4 border-green-400 -mr-1 -mb-1"></div>
+                        {/* Guide Box Landscape (Lebar > Tinggi) */}
+                        {/* aspect-[1.414/1] membuat kotak landscape */}
+                        <div id="guide-box" className="absolute border-2 border-green-400 rounded-lg shadow-[0_0_0_1000px_rgba(0,0,0,0.5)] w-[90%] aspect-[1.414/1] z-10 flex flex-col items-center justify-center">
+                            <p className="text-green-400 text-xs font-bold bg-black/60 px-2 py-1 rounded mt-[-30px]">Posisi Landscape (Mendatar)</p>
+                            <div className="absolute top-0 left-0 w-6 h-6 border-l-4 border-t-4 border-green-400 -ml-1 -mt-1"></div>
+                            <div className="absolute top-0 right-0 w-6 h-6 border-r-4 border-t-4 border-green-400 -mr-1 -mt-1"></div>
+                            <div className="absolute bottom-0 left-0 w-6 h-6 border-l-4 border-b-4 border-green-400 -ml-1 -mb-1"></div>
+                            <div className="absolute bottom-0 right-0 w-6 h-6 border-r-4 border-b-4 border-green-400 -mr-1 -mb-1"></div>
+                            
+                            {/* Indikator Fokus Kanan */}
+                            <div className="absolute top-2 right-2 flex flex-col items-end opacity-70">
+                                <span className="text-[10px] text-green-300 bg-black/40 px-1 rounded">Area No SJ</span>
+                                <div className="w-12 h-8 border border-dashed border-green-300 mt-1 bg-green-500/10"></div>
+                            </div>
                         </div>
 
                         {/* Loading jika stream belum siap */}
@@ -256,7 +256,7 @@
                 setExtractedData(prev => ({ ...prev, noSuratJalan: '' }));
 
                 try {
-                    // --- OPTIMISASI SPEED: Resize Gambar ---
+                    // --- OPTIMISASI SPEED & RESOLUSI ---
                     const img = new Image();
                     img.src = imgData;
                     await new Promise(r => img.onload = r);
@@ -264,7 +264,8 @@
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     
-                    const MAX_WIDTH = 1024; 
+                    // NAIKKAN RESOLUSI untuk membaca teks kecil di sudut
+                    const MAX_WIDTH = 1500; 
                     let width = img.width;
                     let height = img.height;
 
@@ -277,7 +278,7 @@
                     canvas.height = height;
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    const optimizedImgData = canvas.toDataURL('image/jpeg', 0.8);
+                    const optimizedImgData = canvas.toDataURL('image/jpeg', 0.9);
 
                     const result = await Tesseract.recognize(
                         optimizedImgData,
@@ -307,7 +308,8 @@
                 let newNoSuratJalan = '';
                 
                 // 1. PRIORITAS UTAMA: Deteksi "SDO-MKI"
-                const sdoMatch = text.match(/(SDO-MKI[A-Z0-9\-\/]+)/i);
+                // Regex diperluas untuk menangkap variasi SDO-MKI
+                const sdoMatch = text.match(/(SDO[- ]?MKI[A-Z0-9\-\/]+)/i);
 
                 if (sdoMatch) {
                     newNoSuratJalan = sdoMatch[1].trim();
@@ -337,6 +339,7 @@
                     return;
                 }
                 const { jsPDF } = window.jspdf;
+                // Default PDF Portrait. Jika gambar landscape, kita sesuaikan nanti.
                 const doc = new jsPDF();
 
                 doc.setFontSize(18);
@@ -444,7 +447,7 @@
                                                 <IconCamera />
                                             </div>
                                             <span className="text-lg font-bold text-blue-700">Scan Dokumen</span>
-                                            <p className="text-xs text-gray-400 mt-1">Gunakan Kamera & Crop Otomatis</p>
+                                            <p className="text-xs text-gray-400 mt-1">Mode Landscape (Mendatar)</p>
                                         </button>
 
                                         {/* Opsional: Upload File Biasa (Backup) */}
