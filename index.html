@@ -246,21 +246,25 @@
                             {/* Upload Area */}
                             <div className="space-y-3">
                                 {!image ? (
-                                    <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-blue-300 border-dashed rounded-lg cursor-pointer bg-blue-50 hover:bg-blue-100 transition-colors group tap-highlight-transparent">
-                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                            <div className="w-12 h-12 mb-3 text-blue-500 group-hover:scale-110 transition-transform">
+                                    <div className="flex flex-col items-center justify-center w-full min-h-[12rem] border-2 border-blue-300 border-dashed rounded-lg bg-blue-50 p-4 gap-4">
+                                        
+                                        {/* Tombol Kamera Langsung */}
+                                        <label className="flex flex-col items-center justify-center w-full py-8 bg-white rounded-xl shadow-sm border border-blue-200 cursor-pointer hover:bg-blue-50 active:scale-95 transition-all">
+                                            <div className="w-12 h-12 mb-3 text-blue-600">
                                                 <IconCamera />
                                             </div>
-                                            <p className="mb-2 text-sm text-blue-600 font-semibold">Ambil Foto / Upload</p>
-                                            <p className="text-xs text-gray-500">Kamera atau Galeri</p>
-                                        </div>
-                                        <input 
-                                            type="file" 
-                                            className="hidden" 
-                                            accept="image/*" 
-                                            onChange={handleImageUpload} 
-                                        />
-                                    </label>
+                                            <span className="text-lg font-bold text-blue-700">Ambil Foto</span>
+                                            <p className="text-xs text-gray-400 mt-1">Kamera Belakang</p>
+                                            <input 
+                                                type="file" 
+                                                className="hidden" 
+                                                accept="image/*" 
+                                                capture="environment"
+                                                onChange={handleImageUpload} 
+                                            />
+                                        </label>
+                                        
+                                    </div>
                                 ) : (
                                     <div className="relative rounded-lg overflow-hidden border border-gray-200 bg-gray-900 group">
                                         <img src={image} alt="Preview" className="w-full object-contain max-h-64 opacity-90" />
