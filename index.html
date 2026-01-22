@@ -8,9 +8,9 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- React & ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- React & ReactDOM (Updated with crossorigin="anonymous") -->
+    <script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
     <!-- Babel (untuk memproses JSX di browser) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -119,7 +119,15 @@
                 
                 // --- LOGIKA CROP LANDSCAPE ---
                 // Kita asumsikan kotak panduan ada di tengah layar dengan margin tertentu
-                const guideBox = document.getElementById('guide-box').getBoundingClientRect();
+                // Jika elemen belum dirender, fallback ke default rasio
+                const guideBoxElement = document.getElementById('guide-box');
+                
+                // Default fallback jika elemen belum ada
+                let cropRatio = 0.9;
+                
+                if (guideBoxElement) {
+                     // Logika visual: tidak mempengaruhi crop sebenarnya, hanya panduan
+                }
 
                 // Kita capture seluruh frame dulu
                 canvas.width = videoWidth;
@@ -173,10 +181,11 @@
                             <div className="absolute bottom-0 left-0 w-6 h-6 border-l-4 border-b-4 border-green-400 -ml-1 -mb-1"></div>
                             <div className="absolute bottom-0 right-0 w-6 h-6 border-r-4 border-b-4 border-green-400 -mr-1 -mb-1"></div>
                             
-                            {/* Indikator Fokus Kanan */}
-                            <div className="absolute top-2 right-2 flex flex-col items-end opacity-70">
-                                <span className="text-[10px] text-green-300 bg-black/40 px-1 rounded">Area No SJ</span>
-                                <div className="w-12 h-8 border border-dashed border-green-300 mt-1 bg-green-500/10"></div>
+                            {/* Indikator Fokus Kanan - DIPERLEBAR untuk 18 Karakter */}
+                            <div className="absolute top-4 right-4 flex flex-col items-end opacity-80">
+                                <span className="text-[10px] text-green-300 bg-black/40 px-2 py-0.5 rounded mb-1">Area No SJ (18 Digit)</span>
+                                {/* Lebar diubah dari w-12 menjadi w-48 agar terlihat panjang */}
+                                <div className="w-48 h-10 border-2 border-dashed border-green-400 bg-green-500/20 shadow-[0_0_10px_rgba(74,222,128,0.3)]"></div>
                             </div>
                         </div>
 
@@ -265,7 +274,8 @@
                     const ctx = canvas.getContext('2d');
                     
                     // NAIKKAN RESOLUSI untuk membaca teks kecil di sudut
-                    const MAX_WIDTH = 1500; 
+                    // Resolusi lebih tinggi (2000) membantu deteksi karakter yang rapat
+                    const MAX_WIDTH = 2000; 
                     let width = img.width;
                     let height = img.height;
 
@@ -276,6 +286,9 @@
 
                     canvas.width = width;
                     canvas.height = height;
+                    
+                    // Filter Kontras Sederhana (Opsional, membantu OCR)
+                    ctx.filter = 'contrast(1.2) brightness(1.1)';
                     ctx.drawImage(img, 0, 0, width, height);
                     
                     const optimizedImgData = canvas.toDataURL('image/jpeg', 0.9);
@@ -293,7 +306,7 @@
                     );
 
                     const text = result.data.text;
-                    console.log("OCR Result:", text);
+                    console.log("OCR Result RAW:", text); // Cek console untuk melihat hasil mentah
                     parseText(text);
 
                 } catch (err) {
@@ -307,29 +320,74 @@
             const parseText = (text) => {
                 let newNoSuratJalan = '';
                 
-                // 1. PRIORITAS UTAMA: Deteksi "SDO-MKI"
-                // Regex diperluas untuk menangkap variasi SDO-MKI
-                const sdoMatch = text.match(/(SDO[- ]?MKI[A-Z0-9\-\/]+)/i);
+                // BERSIHKAN TEKS:
+                const cleanText = text.replace(/\n/g, ' ');
+
+                // 1. PRIORITAS UTAMA: Deteksi variasi "SDO-MKI"
+                // Regex mencakup karakter S, D, O, M, K, I, angka, -, /, dan spasi
+                const sdoRegex = /([S5]D[O0][\s\-_]*MK[I1l][\s\-_]*[A-Z0-9\-\/\s]{5,30})/i;
+                const sdoMatch = cleanText.match(sdoRegex);
 
                 if (sdoMatch) {
-                    newNoSuratJalan = sdoMatch[1].trim();
+                    let rawCode = sdoMatch[1];
+                    
+                    // NORMALISASI: Hapus spasi saja, biarkan - dan /
+                    let normalized = rawCode.replace(/\s+/g, '').toUpperCase();
+                    
+                    // Perbaiki Typo Prefix (Koreksi otomatis)
+                    normalized = normalized.replace(/^5/, 'S');
+                    normalized = normalized.replace(/^SD0/, 'SDO');
+                    normalized = normalized.replace(/^SDOMK1/, 'SDOMKI');
+                    normalized = normalized.replace(/^SDOMKL/, 'SDOMKI');
+
+                    // LOGIKA BARU: REKONSTRUKSI CERDAS
+                    // Kita cari posisi 'MKI' untuk memisahkan prefix dan suffix
+                    // Tujuannya agar awalan selalu rapi "SDO-MKI" tapi buntutnya (misal /01/26...) tidak rusak
+                    
+                    // Cek apakah string mengandung SDO dan MKI
+                    if (normalized.includes('SDO') && normalized.includes('MKI')) {
+                        // Cari indeks dimana MKI berakhir
+                        const mkiIndex = normalized.indexOf('MKI');
+                        // Ambil sisa string setelah MKI
+                        let remainder = normalized.substring(mkiIndex + 3);
+
+                        // Cek karakter penghubung di sisa string
+                        let separator = '-'; // Default penghubung jika tidak ada apa-apa
+                        
+                        if (remainder.startsWith('/') || remainder.startsWith('-')) {
+                            separator = ''; // Sudah ada penghubung asli (misal /01...), jadi jangan tambah '-'
+                        }
+
+                        // Hasil akhir: SDO-MKI + (Penghubung Asli/Default) + Sisa Angka
+                        newNoSuratJalan = `SDO-MKI${separator}${remainder}`;
+                    } else {
+                        // Fallback jika struktur aneh
+                        newNoSuratJalan = normalized;
+                    }
+
+                    // Potong jika terlalu panjang (sampah OCR di ujung)
+                    if (newNoSuratJalan.length > 30) {
+                        newNoSuratJalan = newNoSuratJalan.substring(0, 30);
+                    }
+
                 } else {
-                    // 2. Jika SDO-MKI tidak ada, cari pola "No SJ" biasa
-                    const sjPattern = /(?:No\.?|Nomor)\s*(?:SJ|Surat\s*Jalan|Faktur|Ref)[:\.]?\s*([\w\/\.-]+)/i;
-                    const sjMatch = text.match(sjPattern);
+                    // 2. FALLBACK 1: Cari pola "No SJ" atau "No." biasa
+                    const sjPattern = /(?:No\.?|Nomor|Ref)\s*[:\.]?\s*([A-Z0-9\/\.-]{3,})/i;
+                    const sjMatch = cleanText.match(sjPattern);
                     
                     if (sjMatch) {
                         newNoSuratJalan = sjMatch[1].trim();
                     }
                 }
 
-                // 3. Fallback: cari pola umum SJ
+                // 3. FALLBACK 2: Cari pola terstruktur XXX/XXX/XXXX
                 if (!newNoSuratJalan) {
-                    const strictCode = /(SJ-[\d\w]+|\d{3,}\/[A-Z]+\/\d{4})/i;
-                    const match = text.match(strictCode);
+                    const strictCode = /(\d{3,}\/[A-Z]+\/\d{4})/i;
+                    const match = cleanText.match(strictCode);
                     if (match) newNoSuratJalan = match[1];
                 }
-
+                
+                console.log("Extracted No SJ:", newNoSuratJalan);
                 setExtractedData(prev => ({ ...prev, noSuratJalan: newNoSuratJalan }));
             };
 
@@ -533,8 +591,17 @@
             );
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<ScannerApp />);
+        const container = document.getElementById('root');
+        if (typeof ReactDOM !== 'undefined') {
+             const root = ReactDOM.createRoot(container);
+             root.render(<ScannerApp />);
+        } else if (window.ReactDOM) {
+             const root = window.ReactDOM.createRoot(container);
+             root.render(<ScannerApp />);
+        } else {
+             console.error("ReactDOM not found");
+             container.innerHTML = '<div class="p-4 text-red-600 font-bold">Error: Library React tidak termuat dengan benar. Silakan refresh halaman.</div>';
+        }
     </script>
 </body>
 </html>
