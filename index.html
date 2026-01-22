@@ -341,42 +341,43 @@
                     normalized = normalized.replace(/^SDOMKL/, 'SDOMKI');
 
                     // LOGIKA BARU: REKONSTRUKSI CERDAS
-                    // Kita cari posisi 'MKI' untuk memisahkan prefix dan suffix
-                    // Tujuannya agar awalan selalu rapi "SDO-MKI" tapi buntutnya (misal /01/26...) tidak rusak
-                    
-                    // Cek apakah string mengandung SDO dan MKI
                     if (normalized.includes('SDO') && normalized.includes('MKI')) {
-                        // Cari indeks dimana MKI berakhir
                         const mkiIndex = normalized.indexOf('MKI');
-                        // Ambil sisa string setelah MKI
                         let remainder = normalized.substring(mkiIndex + 3);
 
-                        // Cek karakter penghubung di sisa string
-                        let separator = '-'; // Default penghubung jika tidak ada apa-apa
-                        
+                        let separator = '-'; 
                         if (remainder.startsWith('/') || remainder.startsWith('-')) {
-                            separator = ''; // Sudah ada penghubung asli (misal /01...), jadi jangan tambah '-'
+                            separator = ''; 
                         }
 
-                        // Hasil akhir: SDO-MKI + (Penghubung Asli/Default) + Sisa Angka
                         newNoSuratJalan = `SDO-MKI${separator}${remainder}`;
                     } else {
-                        // Fallback jika struktur aneh
                         newNoSuratJalan = normalized;
                     }
 
-                    // Potong jika terlalu panjang (sampah OCR di ujung)
                     if (newNoSuratJalan.length > 30) {
                         newNoSuratJalan = newNoSuratJalan.substring(0, 30);
                     }
+                    
+                    // Cegah jika hasil SDO malah menangkap kata aneh
+                    if (newNoSuratJalan.includes('VATION')) newNoSuratJalan = '';
 
-                } else {
+                } 
+                
+                // Jika langkah 1 gagal atau hasilnya kosong
+                if (!newNoSuratJalan) {
                     // 2. FALLBACK 1: Cari pola "No SJ" atau "No." biasa
-                    const sjPattern = /(?:No\.?|Nomor|Ref)\s*[:\.]?\s*([A-Z0-9\/\.-]{3,})/i;
+                    // PERBAIKAN: Regex sekarang WAJIB mengandung angka (\d). 
+                    // Ini mencegah kata seperti "OBSERVATION" atau "VATION" terdeteksi sebagai nomor.
+                    const sjPattern = /(?:No\.?|Nomor|Ref)\s*[:\.]?\s*([A-Z0-9\/\.-]*\d[A-Z0-9\/\.-]*)/i;
                     const sjMatch = cleanText.match(sjPattern);
                     
                     if (sjMatch) {
-                        newNoSuratJalan = sjMatch[1].trim();
+                        let candidate = sjMatch[1].trim();
+                        // Validasi ekstra: Minimal panjang 3 dan bukan kata terlarang
+                        if (candidate.length >= 3 && !candidate.includes('VATION')) {
+                            newNoSuratJalan = candidate;
+                        }
                     }
                 }
 
