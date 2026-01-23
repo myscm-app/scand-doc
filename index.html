@@ -126,6 +126,8 @@
         } = window.firebaseModules || {};
 
         // --- ICONS (Styled) ---
+        const Icon = ({ children, className }) => <span className={`inline-flex items-center justify-center ${className}`}>{children}</span>;
+        
         const SvgIcon = (props) => (
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
                 {props.children}
@@ -158,29 +160,65 @@
              if (!window.jspdf) return null;
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
-            doc.setFillColor(41, 58, 86); doc.rect(0, 0, 210, 40, 'F');
-            doc.setTextColor(255, 255, 255); doc.setFontSize(22); doc.setFont("helvetica", "bold");
+            
+            // Modern Header
+            doc.setFillColor(41, 58, 86); // Corporate Blue
+            doc.rect(0, 0, 210, 40, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(22);
+            doc.setFont("helvetica", "bold");
             doc.text("ARSIP SURAT JALAN", 105, 20, { align: "center" });
-            doc.setFontSize(10); doc.setFont("helvetica", "normal");
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
             doc.text("SEKTE DELIVERY DIGITAL LOG", 105, 30, { align: "center" });
+
+            // Content
             doc.setTextColor(40, 40, 40);
-            let y = 60; const lineHeight = 10;
-            doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.text("DETAIL DOKUMEN", 20, y);
-            y += 8; doc.setDrawColor(200, 200, 200); doc.line(20, y, 190, y); y += 12;
+            
+            let y = 60;
+            const lineHeight = 10;
+            
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "bold");
+            doc.text("DETAIL DOKUMEN", 20, y);
+            y += 8;
+            doc.setDrawColor(200, 200, 200);
+            doc.line(20, y, 190, y);
+            y += 12;
+
             const addField = (label, value) => {
-                doc.setFont("helvetica", "bold"); doc.text(label, 20, y);
-                doc.setFont("helvetica", "normal"); doc.text(": " + value, 60, y); y += lineHeight;
+                doc.setFont("helvetica", "bold");
+                doc.text(label, 20, y);
+                doc.setFont("helvetica", "normal");
+                doc.text(": " + value, 60, y);
+                y += lineHeight;
             };
-            addField("No. Surat Jalan", data.noSuratJalan || '-'); addField("Kategori", data.kategori);
-            addField("Bulan", data.bulan); addField("Tanggal Scan", new Date().toLocaleDateString('id-ID'));
+
+            addField("No. Surat Jalan", data.noSuratJalan || '-');
+            addField("Kategori", data.kategori);
+            addField("Bulan", data.bulan);
+            addField("Tanggal Scan", new Date().toLocaleDateString('id-ID'));
+
+            // Image
             if (imageBase64) {
-                y += 10; doc.setFont("helvetica", "bold"); doc.text("BUKTI FISIK", 20, y);
-                y += 5; doc.line(20, y, 190, y); y += 10;
+                y += 10;
+                doc.setFont("helvetica", "bold");
+                doc.text("BUKTI FISIK", 20, y);
+                y += 5;
+                doc.line(20, y, 190, y);
+                y += 10;
+
                 const imgProps = doc.getImageProperties(imageBase64);
                 const pdfWidth = doc.internal.pageSize.getWidth();
                 const availableWidth = pdfWidth - 40;
                 const imgHeight = (imgProps.height * availableWidth) / imgProps.width;
-                if (y + imgHeight > 280) { doc.addPage(); y = 20; }
+                
+                // Check if image needs new page
+                if (y + imgHeight > 280) {
+                    doc.addPage();
+                    y = 20;
+                }
+
                 doc.addImage(imageBase64, 'JPEG', 20, y, availableWidth, imgHeight);
             }
             return doc;
@@ -188,8 +226,13 @@
 
         const createAndDownloadPDF = (data, imageBase64) => {
             const doc = generatePDFDoc(data, imageBase64);
-            if (!doc) { alert("Library PDF belum siap."); return; }
-            const fileName = data.noSuratJalan ? `${data.noSuratJalan.replace(/[^a-zA-Z0-9\-_]/g, '_')}.pdf` : 'Surat_Jalan_Scan.pdf';
+            if (!doc) {
+                alert("Library PDF belum siap.");
+                return;
+            }
+            const fileName = data.noSuratJalan 
+                ? `${data.noSuratJalan.replace(/[^a-zA-Z0-9\-_]/g, '_')}.pdf` 
+                : 'Surat_Jalan_Scan.pdf';
             doc.save(fileName);
         };
 
@@ -198,11 +241,16 @@
             const [username, setUsername] = useState('');
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
+
             const handleSubmit = (e) => {
                 e.preventDefault();
-                if (username === 'delivery' && password === 'tanzela0308') onSuccess();
-                else setError('Username atau Password salah!');
+                if (username === 'delivery' && password === 'tanzela0308') {
+                    onSuccess();
+                } else {
+                    setError('Username atau Password salah!');
+                }
             };
+
             return (
                 <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl space-y-4">
@@ -214,11 +262,17 @@
                         <form onSubmit={handleSubmit} className="space-y-3">
                             <div className="space-y-1">
                                 <label className="text-xs font-bold text-slate-500 uppercase">Username</label>
-                                <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-2 rounded-lg border text-sm" placeholder="Username" autoFocus />
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-slate-400"><Icons.User className="w-4 h-4"/></span>
+                                    <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-2 pl-9 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:ring-2 focus:ring-red-500 outline-none" placeholder="Username" autoFocus />
+                                </div>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-bold text-slate-500 uppercase">Password</label>
-                                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-2 rounded-lg border text-sm" placeholder="Password" />
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-slate-400"><Icons.Key className="w-4 h-4"/></span>
+                                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-2 pl-9 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:ring-2 focus:ring-red-500 outline-none" placeholder="Password" />
+                                </div>
                             </div>
                             {error && <div className="text-xs text-red-600 font-bold text-center bg-red-50 p-2 rounded">{error}</div>}
                             <div className="flex gap-2 pt-2">
@@ -236,7 +290,11 @@
             const [formData, setFormData] = useState({ ...item });
             const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
             const categories = ["MI", "PASIR", "SLAG"];
-            const handleSubmit = () => { onSave(formData); };
+
+            const handleSubmit = () => {
+                onSave(formData);
+            };
+
             return (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4">
@@ -249,11 +307,15 @@
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-1">Kategori</label>
-                                    <select value={formData.kategori} onChange={(e) => setFormData({...formData, kategori: e.target.value})} className="w-full p-2 border rounded-lg text-sm">{categories.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                                    <select value={formData.kategori} onChange={(e) => setFormData({...formData, kategori: e.target.value})} className="w-full p-2 border rounded-lg text-sm">
+                                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-1">Bulan</label>
-                                    <select value={formData.bulan} onChange={(e) => setFormData({...formData, bulan: e.target.value})} className="w-full p-2 border rounded-lg text-sm">{months.map(m => <option key={m} value={m}>{m}</option>)}</select>
+                                    <select value={formData.bulan} onChange={(e) => setFormData({...formData, bulan: e.target.value})} className="w-full p-2 border rounded-lg text-sm">
+                                        {months.map(m => <option key={m} value={m}>{m}</option>)}
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -271,27 +333,42 @@
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const [isStreamReady, setIsStreamReady] = useState(false);
+
             useEffect(() => {
                 let stream = null;
                 const startCamera = async () => {
                     try {
-                        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } });
-                        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.onloadedmetadata = () => { setIsStreamReady(true); videoRef.current.play(); }; }
+                        stream = await navigator.mediaDevices.getUserMedia({
+                            video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+                        });
+                        if (videoRef.current) {
+                            videoRef.current.srcObject = stream;
+                            videoRef.current.onloadedmetadata = () => { setIsStreamReady(true); videoRef.current.play(); };
+                        }
                     } catch (err) { console.error(err); alert("Gagal akses kamera."); onClose(); }
                 };
-                startCamera(); return () => { if (stream) stream.getTracks().forEach(track => track.stop()); };
+                startCamera();
+                return () => { if (stream) stream.getTracks().forEach(track => track.stop()); };
             }, [onClose]);
+
             const takePhoto = () => {
                 if (!videoRef.current || !canvasRef.current) return;
-                const video = videoRef.current; const canvas = canvasRef.current; const ctx = canvas.getContext('2d');
+                const video = videoRef.current;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
                 canvas.width = video.videoWidth; canvas.height = video.videoHeight;
                 ctx.drawImage(video, 0, 0);
+                
                 const w = canvas.width, h = canvas.height;
-                const cropW = w * 0.9, cropH = cropW / 1.414; const cropX = (w - cropW) / 2, cropY = (h - cropH) / 2;
-                const finalCvs = document.createElement('canvas'); finalCvs.width = cropW; finalCvs.height = cropH;
+                const cropW = w * 0.9, cropH = cropW / 1.414;
+                const cropX = (w - cropW) / 2, cropY = (h - cropH) / 2;
+                
+                const finalCvs = document.createElement('canvas');
+                finalCvs.width = cropW; finalCvs.height = cropH;
                 finalCvs.getContext('2d').drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
                 onCapture(finalCvs.toDataURL('image/jpeg', 0.85));
             };
+
             return (
                 <div className="fixed inset-0 bg-black/90 z-50 flex flex-col backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="relative flex-1 flex items-center justify-center overflow-hidden">
@@ -329,7 +406,6 @@
 
             useEffect(() => {
                 if (!db || !user) { setLoading(false); return; }
-                // UPDATE: Membaca dari Public Logs agar data persisten
                 const q = collection(db, 'artifacts', appId, 'public', 'data', 'surat_jalan_logs');
                 const unsubscribe = onSnapshot(q, (snapshot) => {
                     const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -357,7 +433,7 @@
             const handleAuthSuccess = async () => {
                 setShowAuthModal(false);
                 if (!authAction) return;
-                const publicCol = 'surat_jalan_logs'; // Target public logs
+                const publicCol = 'surat_jalan_logs'; 
                 try {
                     if (authAction.type === 'delete_one') {
                         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', publicCol, authAction.target));
@@ -394,7 +470,8 @@
                         const doc = generatePDFDoc(log, log.imageBase64);
                         if(doc) {
                             const fileName = log.noSuratJalan ? `${log.noSuratJalan.replace(/[^a-zA-Z0-9\-_]/g, '_')}.pdf` : `SJ_${index}.pdf`;
-                            folder.file(fileName, doc.output('blob')); count++;
+                            folder.file(fileName, doc.output('blob'));
+                            count++;
                         }
                     });
                     if(count > 0) {
@@ -416,7 +493,7 @@
 
                      <div className="glass-panel p-5 rounded-2xl space-y-4 relative overflow-hidden shadow-sm">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <h2 className="font-bold text-slate-700 flex gap-2 items-center text-lg"><Icons.List className="text-accent"/> {selectionMode ? `Dipilih (${selectedIds.size})` : 'Filter Laporan (Database Pusat)'}</h2>
+                            <h2 className="font-bold text-slate-700 flex gap-2 items-center text-lg"><Icons.List className="text-accent"/> {selectionMode ? `Dipilih (${selectedIds.size})` : 'Filter Laporan'}</h2>
                             <div className="flex gap-2 w-full md:w-auto justify-end">
                                 {selectionMode ? (
                                     <>
@@ -578,19 +655,12 @@
                                 resolve(canvas.toDataURL('image/jpeg', 0.5));
                             };
                         });
-                        
                         const optImg = await compressImageForDB(image);
-                        
-                        const rec = { 
-                            ...data, 
-                            userId: user.uid, 
-                            createdAt: serverTimestamp(), 
-                            imageBase64: optImg 
-                        };
-                        
-                        // Upload ke Publik agar bisa diakses semua
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'surat_jalan_logs'), rec);
-                        
+                        const rec = { ...data, userId: user.uid, createdAt: serverTimestamp(), imageBase64: optImg };
+                        await Promise.all([
+                            addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'surat_jalan_records'), rec),
+                            addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'surat_jalan_logs'), rec)
+                        ]);
                         alert("Cepat! Data Berhasil Disimpan ke Cloud.");
                         setImage(null); setData(prev => ({ ...prev, noSuratJalan: '' })); setManualSeq(''); setActiveTab('report');
                     } catch (e) {
@@ -720,20 +790,30 @@
         let app, auth, db;
         let appId = 'default-app-id';
         try {
-            if (typeof __firebase_config !== 'undefined' && window.firebaseModules) {
+            // KONFIGURASI PRIORITAS FIREBASE PROJECT ANDA
+            const manualConfig = {
+                apiKey: "AIzaSyCeiYSPF_CTathn38wrRtNANNujuNKgV_o",
+                authDomain: "scan-doc-85b4d.firebaseapp.com",
+                projectId: "scan-doc-85b4d",
+                storageBucket: "scan-doc-85b4d.firebasestorage.app",
+                messagingSenderId: "971055643255",
+                appId: "1:971055643255:web:05ff764f9077e60d102472"
+            };
+
+            // Gunakan config manual jika tersedia
+            if (manualConfig.apiKey && window.firebaseModules) {
+                app = window.firebaseModules.initializeApp(manualConfig);
+                auth = window.firebaseModules.getAuth(app);
+                db = window.firebaseModules.getFirestore(app);
+                appId = manualConfig.projectId;
+            } 
+            // Fallback ke config environment jika manual gagal
+            else if (typeof __firebase_config !== 'undefined' && window.firebaseModules) {
                 const config = JSON.parse(__firebase_config);
                 appId = typeof __app_id !== 'undefined' ? __app_id : 'logistik-tracker-app';
                 app = window.firebaseModules.initializeApp(config);
                 auth = window.firebaseModules.getAuth(app);
                 db = window.firebaseModules.getFirestore(app);
-            } else if (window.firebaseModules) {
-                const manualConfig = { apiKey: "AIzaSyD8695w0097awWGbd6jUSmWFBLr3J9HwOg", authDomain: "scan-spj.firebaseapp.com", projectId: "scan-spj", storageBucket: "scan-spj.firebasestorage.app", messagingSenderId: "391063588629", appId: "1:391063588629:web:c5c6ff03d247d51ed7e31c" };
-                if (manualConfig.apiKey) {
-                    app = window.firebaseModules.initializeApp(manualConfig);
-                    auth = window.firebaseModules.getAuth(app);
-                    db = window.firebaseModules.getFirestore(app);
-                    appId = manualConfig.projectId;
-                }
             }
         } catch (e) { console.error("Firebase init error:", e); }
 
@@ -749,8 +829,21 @@
                 const p = localStorage.getItem('scanner_provider'); if(p) setProvider(p);
                 if (auth) {
                     const init = async () => {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await window.firebaseModules.signInWithCustomToken(auth, __initial_auth_token);
-                        else await window.firebaseModules.signInAnonymously(auth);
+                        try {
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                await window.firebaseModules.signInWithCustomToken(auth, __initial_auth_token);
+                            } else {
+                                throw new Error("No initial token");
+                            }
+                        } catch (err) {
+                            console.log("Token auth failed, trying anonymous...", err);
+                            try {
+                                await window.firebaseModules.signInAnonymously(auth);
+                            } catch (anonErr) {
+                                console.error("Anonymous auth failed. Check Firebase Console > Authentication > Sign-in method > Enable Anonymous.", anonErr);
+                                alert("Gagal Login ke Database. Pastikan 'Anonymous Authentication' sudah diaktifkan di Firebase Console Anda.");
+                            }
+                        }
                     };
                     init();
                     window.firebaseModules.onAuthStateChanged(auth, setUser);
