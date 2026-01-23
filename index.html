@@ -398,21 +398,47 @@
 
             const handleSave = async () => {
                 setIsSaving(true);
-                try {
-                    createAndDownloadPDF(data, image);
-                    if (db && user) {
-                        const record = { ...data, userId: user.uid, createdAt: serverTimestamp(), imageBase64: image };
-                        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'surat_jalan_records'), record);
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'surat_jalan_logs'), record);
-                        alert("Disimpan ke Cloud & PDF!");
+                
+                // LOGIKA BARU: Cek koneksi dulu
+                if (db && user) {
+                    try {
+                        const recordData = {
+                            noSuratJalan: data.noSuratJalan || 'Tanpa Nomor',
+                            kategori: data.kategori,
+                            bulan: data.bulan,
+                            createdAt: serverTimestamp(),
+                            userId: user.uid,
+                            imageBase64: image || null 
+                        };
+                        const userRecordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'surat_jalan_records');
+                        await addDoc(userRecordsRef, recordData);
+                        const publicLogsRef = collection(db, 'artifacts', appId, 'public', 'data', 'surat_jalan_logs');
+                        await addDoc(publicLogsRef, recordData);
+                        
+                        alert("Berhasil! Data tersimpan di Firebase (Cloud).");
+                        
+                        // Reset & Pindah Tab
                         setActiveTab('report');
                         setImage(null);
                         setData(prev => ({ ...prev, noSuratJalan: '' }));
-                    } else {
-                        alert("Disimpan ke PDF (Offline).");
+                    } catch (err) {
+                        console.error("Firebase Save Error:", err);
+                        alert("Gagal upload ke Cloud. Mencoba simpan PDF lokal sebagai backup...");
+                        createAndDownloadPDF(data, image); // Fallback jika upload gagal
                     }
-                } catch (e) { alert("Gagal Simpan"); }
+                } else {
+                    // Mode Offline
+                    alert("Mode Offline: Data akan disimpan sebagai PDF di HP Anda.");
+                    createAndDownloadPDF(data, image);
+                    setImage(null);
+                    setData(prev => ({ ...prev, noSuratJalan: '' }));
+                }
+                
                 setIsSaving(false);
+            };
+
+            const handleInputChange = (field, value) => {
+                setData(prev => ({ ...prev, [field]: value }));
             };
 
             return (
