@@ -126,8 +126,6 @@
         } = window.firebaseModules || {};
 
         // --- ICONS (Styled) ---
-        const Icon = ({ children, className }) => <span className={`inline-flex items-center justify-center ${className}`}>{children}</span>;
-        
         const SvgIcon = (props) => (
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
                 {props.children}
@@ -659,9 +657,20 @@
                 setIsSaving(true);
                 if (db && user) {
                     try {
-                        const rec = { ...data, userId: user.uid, createdAt: serverTimestamp(), imageBase64: image };
-                        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'surat_jalan_records'), rec);
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'surat_jalan_logs'), rec);
+                        const compressImageForDB = (src) => new Promise((resolve) => {
+                            const img = new Image(); img.src = src; img.onload = () => {
+                                const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                                const max = 800; let w = img.width, h = img.height;
+                                if(w>max){h*=max/w; w=max;} canvas.width=w; canvas.height=h; ctx.drawImage(img,0,0,w,h);
+                                resolve(canvas.toDataURL('image/jpeg', 0.6));
+                            };
+                        });
+                        const optImg = await compressImageForDB(image);
+                        const rec = { ...data, userId: user.uid, createdAt: serverTimestamp(), imageBase64: optImg };
+                        await Promise.all([
+                            addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'surat_jalan_records'), rec),
+                            addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'surat_jalan_logs'), rec)
+                        ]);
                         alert("Data Berhasil Disimpan ke Cloud!");
                         setImage(null); setData(prev => ({ ...prev, noSuratJalan: '' })); setManualSeq(''); setActiveTab('report');
                     } catch (e) {
