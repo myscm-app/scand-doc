@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aplikasi Scanner Surat Jalan (AI Powered + Firebase)</title>
+    <title>Aplikasi Scanner Surat Jalan (Multi-Engine)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,9 +18,12 @@
     <!-- jsPDF (PDF Generator) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
-    <!-- JSZip & FileSaver (Untuk Download Batch/Folder) -->
+    <!-- JSZip & FileSaver -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <!-- Tesseract.js (Untuk Mode Offline Unlimited) -->
+    <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
 
     <style>
         @keyframes scan {
@@ -52,18 +55,9 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
         import { getFirestore, collection, addDoc, serverTimestamp, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-        // Expose Firebase functions to window so Babel script can use them
         window.firebaseModules = { 
-            initializeApp, 
-            getAuth, 
-            signInAnonymously, 
-            signInWithCustomToken, 
-            onAuthStateChanged, 
-            getFirestore, 
-            collection, 
-            addDoc, 
-            serverTimestamp,
-            onSnapshot
+            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, 
+            onAuthStateChanged, getFirestore, collection, addDoc, serverTimestamp, onSnapshot
         };
     </script>
 </head>
@@ -74,21 +68,12 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
         
-        // Destructure Firebase modules from window
         const { 
-            initializeApp, 
-            getAuth, 
-            signInAnonymously, 
-            signInWithCustomToken, 
-            onAuthStateChanged, 
-            getFirestore, 
-            collection, 
-            addDoc, 
-            serverTimestamp,
-            onSnapshot
+            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, 
+            onAuthStateChanged, getFirestore, collection, addDoc, serverTimestamp, onSnapshot
         } = window.firebaseModules || {};
 
-        // --- Ikon SVG Components ---
+        // --- ICONS ---
         const IconCamera = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></svg>;
         const IconDownload = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
         const IconRefresh = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>;
@@ -103,28 +88,24 @@
         const IconList = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>;
         const IconHome = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
         const IconZip = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>;
+        const IconZap = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>;
 
-        // Helper function to generate PDF OBJECT (doesn't save immediately)
+        // --- Helper Functions ---
         const generatePDFDoc = (data, imageBase64) => {
              if (!window.jspdf) return null;
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
-
             doc.setFontSize(18);
             doc.text("Arsip Digital Surat Jalan", 20, 20);
-            
             doc.setFontSize(12);
             doc.text(`Kategori        : ${data.kategori}`, 20, 35);
             doc.text(`Bulan           : ${data.bulan}`, 20, 42);
             doc.text(`No. Surat Jalan : ${data.noSuratJalan || '-'}`, 20, 49);
-
             if (imageBase64) {
                 const imgProps = doc.getImageProperties(imageBase64);
                 const pdfWidth = doc.internal.pageSize.getWidth();
-                
                 const finalWidth = pdfWidth - 40;
                 const finalHeight = (imgProps.height * finalWidth) / imgProps.width;
-
                 doc.text("Bukti Fisik:", 20, 65);
                 doc.addImage(imageBase64, 'JPEG', 20, 70, finalWidth, finalHeight);
             }
@@ -143,6 +124,7 @@
             doc.save(fileName);
         };
 
+        // --- Camera Modal ---
         const CameraModal = ({ onCapture, onClose }) => {
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
@@ -153,11 +135,7 @@
                 const startCamera = async () => {
                     try {
                         stream = await navigator.mediaDevices.getUserMedia({
-                            video: {
-                                facingMode: 'environment',
-                                width: { ideal: 1920 }, 
-                                height: { ideal: 1080 }
-                            }
+                            video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
                         });
                         if (videoRef.current) {
                             videoRef.current.srcObject = stream;
@@ -168,42 +146,35 @@
                         }
                     } catch (err) {
                         console.error("Gagal akses kamera:", err);
-                        alert("Tidak dapat mengakses kamera. Pastikan izin diberikan.");
+                        alert("Gagal akses kamera.");
                         onClose();
                     }
                 };
                 startCamera();
-                return () => {
-                    if (stream) stream.getTracks().forEach(track => track.stop());
-                };
+                return () => { if (stream) stream.getTracks().forEach(track => track.stop()); };
             }, [onClose]);
 
             const takePhoto = () => {
                 if (!videoRef.current || !canvasRef.current) return;
-
                 const video = videoRef.current;
                 const canvas = canvasRef.current;
                 const ctx = canvas.getContext('2d');
-
                 const videoWidth = video.videoWidth;
                 const videoHeight = video.videoHeight;
-                
                 canvas.width = videoWidth;
                 canvas.height = videoHeight;
                 ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
-
+                
+                // Crop Landscape
                 const cropWidth = videoWidth * 0.9; 
                 const cropHeight = cropWidth / 1.414;
                 const cropX = (videoWidth - cropWidth) / 2;
                 const cropY = (videoHeight - cropHeight) / 2;
-
                 const cropCanvas = document.createElement('canvas');
                 cropCanvas.width = cropWidth;
                 cropCanvas.height = cropHeight;
                 const cropCtx = cropCanvas.getContext('2d');
-
                 cropCtx.drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-
                 const imageDataUrl = cropCanvas.toDataURL('image/jpeg', 0.85);
                 onCapture(imageDataUrl);
             };
@@ -213,27 +184,17 @@
                     <div className="relative flex-1 bg-black overflow-hidden flex items-center justify-center">
                         <video ref={videoRef} className="absolute min-w-full min-h-full object-cover" playsInline muted />
                         <div className="absolute inset-0 bg-black/50"></div>
-                        
-                        <div className="absolute border-2 border-green-400 rounded-lg shadow-[0_0_0_1000px_rgba(0,0,0,0.5)] w-[90%] aspect-[1.414/1] z-10 flex flex-col items-center justify-center">
-                            <p className="text-green-400 text-xs font-bold bg-black/60 px-2 py-1 rounded mt-[-30px]">Posisi Landscape</p>
-                            <div className="absolute top-0 left-0 w-6 h-6 border-l-4 border-t-4 border-green-400 -ml-1 -mt-1"></div>
-                            <div className="absolute top-0 right-0 w-6 h-6 border-r-4 border-t-4 border-green-400 -mr-1 -mt-1"></div>
-                            <div className="absolute bottom-0 left-0 w-6 h-6 border-l-4 border-b-4 border-green-400 -ml-1 -mb-1"></div>
-                            <div className="absolute bottom-0 right-0 w-6 h-6 border-r-4 border-b-4 border-green-400 -mr-1 -mb-1"></div>
-                            
+                        <div className="absolute border-2 border-green-400 rounded-lg w-[90%] aspect-[1.414/1] z-10 flex flex-col items-center justify-center">
+                            <p className="text-green-400 text-xs font-bold bg-black/60 px-2 py-1 rounded mt-[-30px]">Mode Landscape</p>
                             <div className="absolute top-4 right-4 flex flex-col items-end opacity-80">
                                 <span className="text-[10px] text-green-300 bg-black/40 px-2 py-0.5 rounded mb-1">Area No SJ (18 Digit)</span>
-                                <div className="w-48 h-10 border-2 border-dashed border-green-400 bg-green-500/20 shadow-[0_0_10px_rgba(74,222,128,0.3)]"></div>
+                                <div className="w-48 h-10 border-2 border-dashed border-green-400 bg-green-500/20"></div>
                             </div>
                         </div>
-
-                        {!isStreamReady && <div className="absolute z-20 text-white flex flex-col items-center"><IconLoader /> <span className="text-sm mt-2">Membuka Kamera...</span></div>}
                     </div>
                     <div className="h-24 bg-black flex items-center justify-around px-6">
                         <button onClick={onClose} className="p-3 rounded-full bg-gray-800 text-white"><IconClose /></button>
-                        <button onClick={takePhoto} disabled={!isStreamReady} className="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center bg-transparent active:bg-white/20 transition-all">
-                            <div className="w-12 h-12 bg-white rounded-full"></div>
-                        </button>
+                        <button onClick={takePhoto} disabled={!isStreamReady} className="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center bg-transparent active:bg-white/20 transition-all"><div className="w-12 h-12 bg-white rounded-full"></div></button>
                         <div className="w-10"></div>
                     </div>
                     <canvas ref={canvasRef} className="hidden"></canvas>
@@ -241,46 +202,24 @@
             );
         };
 
-        // --- COMPONENTS ---
-        
+        // --- Reports View ---
         const ReportsView = ({ db, user, appId }) => {
             const [logs, setLogs] = useState([]);
             const [loading, setLoading] = useState(true);
             const [filterMonth, setFilterMonth] = useState('Semua');
             const [searchTerm, setSearchTerm] = useState('');
             const [isBatchDownloading, setIsBatchDownloading] = useState(false);
-
             const months = ["Semua", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
             useEffect(() => {
-                if (!db || !user) {
-                    setLoading(false);
-                    return;
-                }
-
-                // Query all user records
+                if (!db || !user) { setLoading(false); return; }
                 const q = collection(db, 'artifacts', appId, 'users', user.uid, 'surat_jalan_records');
-                
                 const unsubscribe = onSnapshot(q, (snapshot) => {
-                    const data = snapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data()
-                    }));
-                    
-                    // Sort descending by date
-                    data.sort((a, b) => {
-                        const dateA = a.createdAt ? a.createdAt.seconds : 0;
-                        const dateB = b.createdAt ? b.createdAt.seconds : 0;
-                        return dateB - dateA;
-                    });
-
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
                     setLogs(data);
                     setLoading(false);
-                }, (error) => {
-                    console.error("Error fetching logs:", error);
-                    setLoading(false);
-                });
-
+                }, () => setLoading(false));
                 return () => unsubscribe();
             }, [db, user, appId]);
 
@@ -293,265 +232,166 @@
             const handleBatchDownload = async () => {
                 if (filteredLogs.length === 0) return;
                 setIsBatchDownloading(true);
-                
                 try {
                     const zip = new JSZip();
-                    // Gunakan nama folder berdasarkan filter
-                    const folderName = filterMonth === 'Semua' ? 'Laporan_Semua_Data' : `Laporan_${filterMonth}`;
+                    const folderName = filterMonth === 'Semua' ? 'Laporan_Semua' : `Laporan_${filterMonth}`;
                     const folder = zip.folder(folderName);
-
-                    // Loop semua file filtered dan generate PDF
                     let count = 0;
                     filteredLogs.forEach((log, index) => {
-                        // Skip jika tidak ada gambar (opsional, tapi lebih baik ada PDF walaupun kosong)
                         const doc = generatePDFDoc(log, log.imageBase64);
                         if(doc) {
-                            const pdfBlob = doc.output('blob');
-                            const fileName = log.noSuratJalan 
-                                ? `${log.noSuratJalan.replace(/[^a-zA-Z0-9\-_]/g, '_')}.pdf` 
-                                : `Surat_Jalan_${index+1}.pdf`;
-                            
-                            folder.file(fileName, pdfBlob);
+                            const fileName = log.noSuratJalan ? `${log.noSuratJalan.replace(/[^a-zA-Z0-9\-_]/g, '_')}.pdf` : `SJ_${index}.pdf`;
+                            folder.file(fileName, doc.output('blob'));
                             count++;
                         }
                     });
-
                     if(count > 0) {
                         const content = await zip.generateAsync({ type: "blob" });
                         saveAs(content, `${folderName}.zip`);
-                        alert(`Berhasil mendownload ${count} file dalam ${folderName}.zip`);
-                    } else {
-                        alert("Tidak ada file yang bisa di-zip.");
+                        alert(`Berhasil: ${folderName}.zip`);
                     }
-
-                } catch (e) {
-                    console.error("Batch download error:", e);
-                    alert("Gagal membuat file ZIP. Coba lagi.");
-                } finally {
-                    setIsBatchDownloading(false);
-                }
+                } catch (e) { alert("Gagal ZIP"); }
+                setIsBatchDownloading(false);
             };
 
-            if (loading) return <div className="p-8 text-center text-gray-500"><IconLoader /> Memuat data...</div>;
-            if (!user) return <div className="p-8 text-center text-gray-500">Anda sedang offline. Data tidak tersedia.</div>;
+            if (loading) return <div className="p-8 text-center text-gray-500"><IconLoader /></div>;
+            if (!user) return <div className="p-8 text-center text-gray-500">Offline Mode (Data Lokal Saja)</div>;
 
             return (
                 <div className="space-y-4 pb-20">
                      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-3">
-                        <div className="flex items-center justify-between">
-                            <h2 className="font-bold text-gray-700 flex items-center gap-2">
-                                <IconList /> Filter Laporan
-                            </h2>
-                            
-                            {/* Tombol Batch Download */}
-                            <button 
-                                onClick={handleBatchDownload}
-                                disabled={isBatchDownloading || filteredLogs.length === 0}
-                                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isBatchDownloading || filteredLogs.length === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'}`}
-                            >
-                                {isBatchDownloading ? (
-                                    <><span className="w-3 h-3 animate-spin"><IconLoader /></span> Zipping...</>
-                                ) : (
-                                    <><IconZip /> Download ZIP {filterMonth !== 'Semua' ? `(${filterMonth})` : '(Semua)'}</>
-                                )}
+                        <div className="flex justify-between items-center">
+                            <h2 className="font-bold text-gray-700 flex gap-2"><IconList /> Filter Laporan</h2>
+                            <button onClick={handleBatchDownload} disabled={isBatchDownloading || filteredLogs.length === 0} className="flex gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-200">
+                                {isBatchDownloading ? <IconLoader /> : <><IconZip /> ZIP</>}
                             </button>
                         </div>
-
                         <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bulan</label>
-                                <select 
-                                    value={filterMonth}
-                                    onChange={(e) => setFilterMonth(e.target.value)}
-                                    className="w-full p-2 text-sm rounded border border-gray-200 outline-none focus:border-green-500"
-                                >
-                                    {months.map(m => <option key={m} value={m}>{m}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cari File</label>
-                                <input 
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="No SJ..."
-                                    className="w-full p-2 text-sm rounded border border-gray-200 outline-none focus:border-green-500"
-                                />
-                            </div>
+                            <select value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="w-full p-2 text-sm rounded border bg-gray-50">{months.map(m => <option key={m} value={m}>{m}</option>)}</select>
+                            <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Cari No SJ..." className="w-full p-2 text-sm rounded border bg-gray-50" />
                         </div>
-                        
-                        <div className="text-xs text-gray-400 text-right">
-                            Menampilkan {filteredLogs.length} file
-                        </div>
+                        <div className="text-xs text-right text-gray-400">{filteredLogs.length} File</div>
                     </div>
-
                     <div className="space-y-3">
-                        {filteredLogs.length === 0 ? (
-                            <div className="text-center text-gray-400 py-10 flex flex-col items-center">
-                                <span className="text-4xl mb-2">📂</span>
-                                Tidak ada data ditemukan
-                            </div>
-                        ) : (
-                            filteredLogs.map(log => (
-                                <div key={log.id} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex gap-3 items-start">
-                                    <div className="w-16 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200">
-                                        {log.imageBase64 ? (
-                                            <img src={log.imageBase64} alt="Thumb" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-gray-300 text-xs">No Img</div>
-                                        )}
-                                    </div>
-                                    
-                                    <div className="flex-1 min-w-0 py-1">
-                                        <h4 className="font-bold text-sm text-gray-800 truncate mb-1">{log.noSuratJalan}</h4>
-                                        <div className="flex gap-2 mb-1">
-                                            <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{log.kategori}</span>
-                                            <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{log.bulan}</span>
-                                        </div>
-                                        <p className="text-[10px] text-gray-400">
-                                            {log.createdAt ? new Date(log.createdAt.seconds * 1000).toLocaleString('id-ID') : 'Baru saja'}
-                                        </p>
-                                    </div>
-                                    
-                                    <button 
-                                        onClick={() => createAndDownloadPDF(log, log.imageBase64)} 
-                                        className="self-center p-2 text-green-600 bg-green-50 rounded-full hover:bg-green-100"
-                                        title="Download PDF"
-                                    >
-                                        <IconDownload className="w-5 h-5" />
-                                    </button>
+                        {filteredLogs.map(log => (
+                            <div key={log.id} className="bg-white p-3 rounded-xl shadow-sm border flex gap-3 items-center">
+                                <div className="w-12 h-16 bg-gray-100 rounded overflow-hidden flex-shrink-0">
+                                    {log.imageBase64 ? <img src={log.imageBase64} className="w-full h-full object-cover"/> : <div className="text-xs text-center pt-6">No Img</div>}
                                 </div>
-                            ))
-                        )}
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-bold text-sm truncate">{log.noSuratJalan}</div>
+                                    <div className="text-xs text-gray-500">{log.kategori} • {log.bulan}</div>
+                                </div>
+                                <button onClick={() => createAndDownloadPDF(log, log.imageBase64)} className="p-2 text-green-600 bg-green-50 rounded-full"><IconDownload /></button>
+                            </div>
+                        ))}
                     </div>
                 </div>
             );
         };
 
-        const ScannerView = ({ user, db, appId, apiKey, setApiKey, showSettings, setShowSettings, setActiveTab }) => {
+        // --- Scanner View ---
+        const ScannerView = ({ user, db, appId, apiKey, setApiKey, provider, setProvider, showSettings, setShowSettings, setActiveTab }) => {
             const [image, setImage] = useState(null);
             const [isProcessing, setIsProcessing] = useState(false);
             const [showCamera, setShowCamera] = useState(false);
             const [isSaving, setIsSaving] = useState(false);
+            const [data, setData] = useState({ noSuratJalan: '', bulan: new Date().toLocaleString('id-ID', { month: 'long' }), kategori: 'MI' });
             
-            const [extractedData, setExtractedData] = useState({
-                noSuratJalan: '',
-                bulan: new Date().toLocaleString('id-ID', { month: 'long' }),
-                kategori: 'MI'
-            });
-
-            const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-            const categories = ["MI", "PASIR", "SLAG"];
-
-            const saveApiKey = () => {
-                if (apiKey.trim().startsWith('sk-')) {
-                    localStorage.setItem('openai_api_key', apiKey.trim());
-                    setShowSettings(false);
-                    alert("API Key tersimpan!");
-                } else {
-                    alert("Format API Key sepertinya salah. Harus diawali 'sk-'");
-                }
-            };
-
-            const handleCameraCapture = (imgDataUrl) => {
-                setImage(imgDataUrl);
-                setShowCamera(false);
-                processImageWithAI(imgDataUrl);
-            };
-
-            const handleImageUpload = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        setImage(reader.result);
-                        processImageWithAI(reader.result);
-                    };
-                    reader.readAsDataURL(file);
-                }
-            };
-
-            const processImageWithAI = async (imgData) => {
-                if (!apiKey) {
-                    alert("Silakan masukkan OpenAI API Key terlebih dahulu di menu Pengaturan (ikon kunci).");
+            const processImage = async (imgData) => {
+                if (provider !== 'tesseract' && !apiKey) {
+                    alert("API Key diperlukan untuk mode AI!");
                     setShowSettings(true);
                     return;
                 }
-
+                
                 setIsProcessing(true);
-                setExtractedData(prev => ({ ...prev, noSuratJalan: '' }));
+                setData(prev => ({ ...prev, noSuratJalan: '' }));
 
                 try {
+                    // Pre-process Image
                     const img = new Image();
                     img.src = imgData;
                     await new Promise(r => img.onload = r);
-
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
-                    
-                    const MAX_WIDTH = 1200; 
-                    let width = img.width;
-                    let height = img.height;
+                    const MAX_WIDTH = 1500;
+                    let w = img.width, h = img.height;
+                    if (w > MAX_WIDTH) { h *= MAX_WIDTH/w; w = MAX_WIDTH; }
+                    canvas.width = w; canvas.height = h;
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const optimizedData = canvas.toDataURL('image/jpeg', 0.9);
 
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width;
-                        width = MAX_WIDTH;
-                    }
+                    let resultText = "";
 
-                    canvas.width = width;
-                    canvas.height = height;
-                    ctx.drawImage(img, 0, 0, width, height);
-                    const optimizedImgData = canvas.toDataURL('image/jpeg', 0.8);
-
-                    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": `Bearer ${apiKey}`
-                        },
-                        body: JSON.stringify({
-                            model: "gpt-4o-mini",
-                            messages: [
-                                {
-                                    role: "user",
-                                    content: [
-                                        { 
-                                            type: "text", 
-                                            text: "Temukan Nomor Surat Jalan di gambar ini. Formatnya biasanya diawali 'SDO-MKI' (contoh: SDO-MKI-12345 atau SDO-MKI/01/26/0724). Abaikan teks header seperti 'OBSERVATION', 'RESERVATION'. Hanya kembalikan nomornya saja sebagai teks mentah. Jika tidak yakin, kembalikan string kosong." 
-                                        },
-                                        {
-                                            type: "image_url",
-                                            image_url: {
-                                                url: optimizedImgData
-                                            }
-                                        }
+                    if (provider === 'tesseract') {
+                        if (!window.Tesseract) throw new Error("Tesseract not loaded");
+                        const res = await window.Tesseract.recognize(optimizedData, 'ind');
+                        resultText = res.data.text;
+                    } else if (provider === 'gemini') {
+                        // Google Gemini Logic
+                        const base64Image = optimizedData.split(',')[1];
+                        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+                        const response = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{
+                                    parts: [
+                                        { text: "Extract ONLY the 'Surat Jalan' number. It usually starts with SDO-MKI. Ignore other text like 'OBSERVATION'. Return just the number." },
+                                        { inline_data: { mime_type: "image/jpeg", data: base64Image } }
                                     ]
-                                }
-                            ],
-                            max_tokens: 50
-                        })
-                    });
-
-                    const data = await response.json();
-
-                    if (data.error) {
-                        console.error("OpenAI Error:", data.error);
-                        alert("Error dari OpenAI: " + data.error.message);
-                    } else {
-                        const content = data.choices[0].message.content.trim();
-                        let cleanNo = content.replace(/^(Nomor|No\.|SJ|Surat Jalan)[:\s]*/i, '').trim();
-                        cleanNo = cleanNo.replace(/['"]+/g, '').replace(/\.$/, '');
-                        
-                        if (cleanNo.toLowerCase() === "kosong" || cleanNo.toLowerCase() === "tidak ditemukan") {
-                            cleanNo = "";
+                                }]
+                            })
+                        });
+                        const json = await response.json();
+                        if (json.candidates && json.candidates[0].content) {
+                            resultText = json.candidates[0].content.parts[0].text;
                         }
-
-                        setExtractedData(prev => ({ ...prev, noSuratJalan: cleanNo }));
+                    } else {
+                        // OpenAI Logic
+                        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+                            body: JSON.stringify({
+                                model: "gpt-4o-mini",
+                                messages: [
+                                    { role: "user", content: [
+                                        { type: "text", text: "Extract ONLY the 'Surat Jalan' number (e.g. SDO-MKI-...). Return just the number." },
+                                        { type: "image_url", image_url: { url: optimizedData } }
+                                    ]}
+                                ],
+                                max_tokens: 50
+                            })
+                        });
+                        const json = await response.json();
+                        resultText = json.choices[0].message.content;
                     }
 
-                } catch (err) {
-                    console.error(err);
-                    alert("Gagal menghubungi AI. Periksa koneksi internet atau API Key Anda.");
+                    // Clean Result
+                    console.log("Raw Result:", resultText);
+                    let clean = resultText.replace(/\n/g, ' ').trim();
+                    // Basic parsing logic similar to before
+                    const sdoMatch = clean.match(/([S5]D[O0][\s\-_]*MK[I1l][\s\-_]*[A-Z0-9\-\/\s]{5,30})/i);
+                    if (sdoMatch) {
+                        clean = sdoMatch[1].replace(/\s+/g, '').toUpperCase();
+                        clean = clean.replace(/^5/, 'S').replace(/^SD0/, 'SDO').replace(/^SDOMK1/, 'SDOMKI').replace(/^SDOMKL/, 'SDOMKI');
+                        if (!clean.includes('-') && clean.length > 6) {
+                             const prefix = clean.substring(0, 6); const suffix = clean.substring(6);
+                             if (prefix === 'SDOMKI') clean = `SDO-MKI-${suffix}`;
+                        }
+                    } else {
+                        // Fallback logic
+                        const numMatch = clean.match(/([A-Z0-9\-\/]{5,})/i);
+                        if(numMatch) clean = numMatch[1];
+                    }
+                    
+                    if (clean.includes("VATION")) clean = "";
+                    setData(prev => ({ ...prev, noSuratJalan: clean }));
+
+                } catch (e) {
+                    console.error(e);
+                    alert("Gagal membaca gambar: " + e.message);
                 } finally {
                     setIsProcessing(false);
                 }
@@ -559,238 +399,179 @@
 
             const handleSave = async () => {
                 setIsSaving(true);
-
-                // 1. Generate & Download PDF
                 try {
-                    createAndDownloadPDF(extractedData, image);
-                } catch (err) {
-                    console.error("PDF Error:", err);
-                    alert("Gagal membuat PDF.");
-                    setIsSaving(false);
-                    return;
-                }
-
-                // 2. Upload to Firebase
-                if (db && user) {
-                    try {
-                        const recordData = {
-                            noSuratJalan: extractedData.noSuratJalan || 'Tanpa Nomor',
-                            kategori: extractedData.kategori,
-                            bulan: extractedData.bulan,
-                            createdAt: serverTimestamp(),
-                            userId: user.uid,
-                            imageBase64: image || null 
-                        };
-
-                        const userRecordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'surat_jalan_records');
-                        await addDoc(userRecordsRef, recordData);
-                        
-                        const publicLogsRef = collection(db, 'artifacts', appId, 'public', 'data', 'surat_jalan_logs');
-                        await addDoc(publicLogsRef, recordData);
-
-                        alert("PDF tersimpan & Data berhasil diupload!");
-                        
-                        // --- FITUR BARU: AUTO SWITCH & RESET ---
-                        // Reset Form setelah save sukses
+                    createAndDownloadPDF(data, image);
+                    if (db && user) {
+                        const record = { ...data, userId: user.uid, createdAt: serverTimestamp(), imageBase64: image };
+                        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'surat_jalan_records'), record);
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'surat_jalan_logs'), record);
+                        alert("Disimpan ke Cloud & PDF!");
+                        setActiveTab('report');
                         setImage(null);
-                        setExtractedData(prev => ({ ...prev, noSuratJalan: '' }));
-                        // Pindah ke tab Laporan
-                        if (setActiveTab) setActiveTab('report');
-
-                    } catch (err) {
-                        console.error("Firebase Save Error:", err);
-                        alert("PDF tersimpan, tapi GAGAL upload ke database cloud.");
+                        setData(prev => ({ ...prev, noSuratJalan: '' }));
+                    } else {
+                        alert("Disimpan ke PDF (Offline).");
                     }
-                } else {
-                    alert("PDF tersimpan di HP (Mode Offline).");
-                }
-                
+                } catch (e) { alert("Gagal Simpan"); }
                 setIsSaving(false);
             };
 
-            const handleInputChange = (field, value) => {
-                setExtractedData(prev => ({ ...prev, [field]: value }));
-            };
-
             return (
-                 <div className="space-y-6 pb-20">
-                    {showCamera && <CameraModal onCapture={handleCameraCapture} onClose={() => setShowCamera(false)} />}
+                <div className="space-y-6 pb-20">
+                    {showCamera && <CameraModal onCapture={(img) => { setImage(img); setShowCamera(false); processImage(img); }} onClose={() => setShowCamera(false)} />}
                     
                     {showSettings && (
                         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl">
-                                <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><IconKey /> Setup OpenAI API</h3>
-                                <p className="text-sm text-gray-600 mb-4">Masukkan API Key OpenAI.<br/><br/><a href="https://platform.openai.com/api-keys" target="_blank" className="text-green-600 underline font-semibold">Dapatkan API Key</a></p>
-                                <input type="password" placeholder="sk-..." value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="w-full border p-2 rounded mb-4 font-mono text-sm" />
-                                <div className="flex justify-end gap-2">
-                                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded">Batal</button>
-                                    <button onClick={saveApiKey} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Simpan</button>
+                            <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl space-y-4">
+                                <h3 className="font-bold text-lg">Pengaturan Scanner</h3>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Mesin Pembaca</label>
+                                    <select value={provider} onChange={(e) => setProvider(e.target.value)} className="w-full border p-2 rounded">
+                                        <option value="gemini">Google Gemini (Gratis/Limit)</option>
+                                        <option value="openai">OpenAI GPT-4o (Berbayar)</option>
+                                        <option value="tesseract">Offline (Gratis/Unlimited)</option>
+                                    </select>
+                                </div>
+                                {provider !== 'tesseract' && (
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">API Key ({provider === 'gemini' ? 'Google AI Studio' : 'OpenAI'})</label>
+                                        <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="w-full border p-2 rounded" placeholder="Paste Key Disini..." />
+                                        <a href={provider === 'gemini' ? "https://aistudio.google.com/app/apikey" : "https://platform.openai.com/api-keys"} target="_blank" className="text-xs text-blue-600 underline">Dapatkan API Key</a>
+                                    </div>
+                                )}
+                                <div className="flex justify-end gap-2 pt-2">
+                                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-gray-500">Tutup</button>
+                                    <button onClick={() => { localStorage.setItem('scanner_api_key', apiKey); localStorage.setItem('scanner_provider', provider); setShowSettings(false); }} className="px-4 py-2 bg-green-600 text-white rounded">Simpan</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Inputs */}
-                    <div className="grid grid-cols-2 gap-3 bg-green-50 p-3 rounded-lg border border-green-100">
+                    <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-lg border">
                         <div>
-                            <label className="block text-xs font-bold text-green-800 uppercase mb-1 flex items-center gap-1"><span className="w-3 h-3"><IconCalendar /></span> Bulan</label>
-                            <div className="relative">
-                                <select value={extractedData.bulan} onChange={(e) => handleInputChange('bulan', e.target.value)} className="w-full p-2 text-sm rounded border border-green-200 focus:ring-2 focus:ring-green-500 outline-none appearance-none bg-white cursor-pointer">
-                                    {months.map(m => <option key={m} value={m}>{m}</option>)}
-                                </select>
-                            </div>
+                            <label className="text-xs font-bold text-gray-500 block mb-1">Bulan</label>
+                            <select value={data.bulan} onChange={(e) => setData({...data, bulan: e.target.value})} className="w-full border p-2 rounded text-sm bg-gray-50">
+                                {["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"].map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-green-800 uppercase mb-1 flex items-center gap-1"><span className="w-3 h-3"><IconTag /></span> Kategori</label>
-                            <div className="relative">
-                                <select value={extractedData.kategori} onChange={(e) => handleInputChange('kategori', e.target.value)} className="w-full p-2 text-sm rounded border border-green-200 focus:ring-2 focus:ring-green-500 outline-none appearance-none bg-white cursor-pointer">
-                                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                            </div>
+                            <label className="text-xs font-bold text-gray-500 block mb-1">Kategori</label>
+                            <select value={data.kategori} onChange={(e) => setData({...data, kategori: e.target.value})} className="w-full border p-2 rounded text-sm bg-gray-50">
+                                {["MI", "PASIR", "SLAG"].map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
                         </div>
                     </div>
-                    
-                    {/* Upload */}
+
                     <div className="space-y-3">
                         {!image ? (
-                            <div className="flex flex-col items-center justify-center w-full min-h-[12rem] border-2 border-green-300 border-dashed rounded-lg bg-green-50 p-4 gap-4">
-                                <button onClick={() => setShowCamera(true)} className="flex flex-col items-center justify-center w-full py-8 bg-white rounded-xl shadow-sm border border-green-200 cursor-pointer hover:bg-green-50 active:scale-95 transition-all">
-                                    <div className="w-12 h-12 mb-3 text-green-600"><IconCamera /></div>
-                                    <span className="text-lg font-bold text-green-700">Scan Dokumen</span>
-                                    <p className="text-xs text-gray-400 mt-1">AI Vision (Butuh API Key)</p>
-                                </button>
-                                <label className="text-xs text-green-600 underline cursor-pointer p-2">Upload file manual<input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} /></label>
-                            </div>
+                            <button onClick={() => setShowCamera(true)} className="w-full py-12 border-2 border-dashed border-green-300 bg-green-50 rounded-xl flex flex-col items-center justify-center text-green-600 hover:bg-green-100 transition-colors">
+                                <IconCamera />
+                                <span className="font-bold mt-2">Scan Dokumen</span>
+                                <span className="text-xs opacity-70 mt-1">Mode: {provider === 'tesseract' ? 'Offline' : (provider === 'gemini' ? 'Gemini AI' : 'OpenAI')}</span>
+                            </button>
                         ) : (
-                            <div className="relative rounded-lg overflow-hidden border border-gray-200 bg-gray-900 group">
-                                <img src={image} alt="Preview" className="w-full object-contain max-h-64 opacity-90" />
-                                {isProcessing && <div className="scan-line"></div>}
-                                <button onClick={() => setImage(null)} className="absolute top-2 right-2 bg-red-500 text-white p-3 rounded-full hover:bg-red-600 shadow-md active:scale-90 transition-transform" title="Scan Ulang"><IconRefresh /></button>
+                            <div className="relative rounded-xl overflow-hidden bg-black">
+                                <img src={image} className="w-full opacity-80" />
+                                <button onClick={() => setImage(null)} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full"><IconRefresh /></button>
                             </div>
                         )}
                     </div>
 
-                    {/* Loading */}
-                    {isProcessing && (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-4 animate-pulse">
-                            <div className="flex items-center gap-3 mb-2"><div className="w-5 h-5 text-green-600"><IconLoader /></div><span className="font-semibold text-green-700 text-sm">AI Sedang Menganalisa...</span></div>
-                            <div className="w-full bg-gray-200 rounded-full h-2.5"><div className="bg-green-600 h-2.5 rounded-full w-full animate-[wiggle_1s_ease-in-out_infinite]"></div></div>
-                            <p className="text-right text-xs text-green-600 mt-1">Mengirim ke OpenAI...</p>
-                        </div>
-                    )}
+                    {isProcessing && <div className="bg-blue-50 p-4 rounded-xl flex items-center gap-3 text-blue-700 animate-pulse"><IconLoader /> <span>Sedang Membaca Teks...</span></div>}
 
-                    {/* Result */}
-                    <div className="space-y-4">
-                        <h3 className="font-bold text-gray-700 border-b pb-2 flex items-center gap-2"><span className="w-4 h-4 text-green-500"><IconCheck /></span> Hasil Deteksi AI</h3>
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">No. Surat Jalan</label>
-                            <input type="text" value={extractedData.noSuratJalan} onChange={(e) => handleInputChange('noSuratJalan', e.target.value)} placeholder="Menunggu hasil AI..." className={`w-full p-3 rounded-lg border outline-none transition-all focus:ring-2 focus:ring-green-500 text-lg ${extractedData.noSuratJalan ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`} />
-                        </div>
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-gray-500">No. Surat Jalan</label>
+                        <input type="text" value={data.noSuratJalan} onChange={(e) => setData({...data, noSuratJalan: e.target.value})} className="w-full border-2 border-green-200 p-3 rounded-xl focus:border-green-500 outline-none text-lg font-mono font-bold" placeholder="..." />
                     </div>
 
-                    <button onClick={handleSave} disabled={!image || isProcessing || isSaving} className={`w-full py-4 rounded-xl flex items-center justify-center gap-2 font-bold text-white shadow-lg transform active:scale-95 transition-all ${!image || isProcessing || isSaving ? 'bg-gray-300 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 hover:shadow-green-200'}`}>
-                        {isSaving ? <><span className="w-5 h-5 animate-spin"><IconLoader /></span> Menyimpan...</> : <><span className="w-5 h-5"><IconCloud /></span> Simpan ke PDF & Cloud</>}
+                    <button onClick={handleSave} disabled={!image || isProcessing || isSaving} className="w-full py-4 bg-green-600 text-white font-bold rounded-xl shadow-lg hover:bg-green-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
+                        {isSaving ? <IconLoader /> : <IconCloud />} Simpan Data
                     </button>
                 </div>
             );
         };
 
-        // --- GLOBAL APP INITIALIZATION ---
-        
-        // Initialize Firebase
-        let app, auth, db;
-        let appId = 'default-app-id';
-
-        try {
-            if (typeof __firebase_config !== 'undefined' && window.firebaseModules) {
-                const firebaseConfig = JSON.parse(__firebase_config);
-                appId = typeof __app_id !== 'undefined' ? __app_id : 'logistik-tracker-app';
-                
-                app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-            } else {
-                console.warn("Firebase Config not found. Using local mode.");
-            }
-        } catch (e) {
-            console.error("Firebase init error:", e);
-        }
-
+        // --- Main App ---
         const ScannerApp = () => {
             const [activeTab, setActiveTab] = useState('scan');
             const [user, setUser] = useState(null);
             const [apiKey, setApiKey] = useState('');
+            const [provider, setProvider] = useState('gemini'); // Default to Gemini
             const [showSettings, setShowSettings] = useState(false);
 
             useEffect(() => {
-                const storedKey = localStorage.getItem('openai_api_key');
+                const storedKey = localStorage.getItem('scanner_api_key');
+                const storedProvider = localStorage.getItem('scanner_provider');
                 if (storedKey) setApiKey(storedKey);
+                if (storedProvider) setProvider(storedProvider);
 
-                if (auth) {
-                    const initAuth = async () => {
-                        try {
-                             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                await signInWithCustomToken(auth, __initial_auth_token);
-                             } else {
-                                await signInAnonymously(auth);
-                             }
-                        } catch (err) {
-                            console.error("Auth Error:", err);
-                        }
-                    };
-                    initAuth();
-                    const unsubscribe = onAuthStateChanged(auth, setUser);
-                    return () => unsubscribe();
-                }
+                // Initialize Firebase Auth
+                let app, auth;
+                try {
+                    if (typeof __firebase_config !== 'undefined' && window.firebaseModules) {
+                        const config = JSON.parse(__firebase_config);
+                        app = window.firebaseModules.initializeApp(config);
+                    } else if (window.firebaseModules) {
+                        // Manual config fallback
+                        const manualConfig = { apiKey: "YOUR_API_KEY", authDomain: "logistik-tracker-app.firebaseapp.com", projectId: "logistik-tracker-app" }; 
+                        // Only init if real key provided, otherwise skip
+                        if(manualConfig.apiKey !== "YOUR_API_KEY") app = window.firebaseModules.initializeApp(manualConfig);
+                    }
+                    
+                    if (app) {
+                        auth = window.firebaseModules.getAuth(app);
+                        const initAuth = async () => {
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                await window.firebaseModules.signInWithCustomToken(auth, __initial_auth_token);
+                            } else {
+                                await window.firebaseModules.signInAnonymously(auth);
+                            }
+                        };
+                        initAuth();
+                        window.firebaseModules.onAuthStateChanged(auth, setUser);
+                    }
+                } catch (e) { console.error("Auth init error", e); }
             }, []);
 
+            // Firebase App ID logic
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'logistik-tracker-app';
+            
+            // Get DB instance safely
+            let db = null;
+            try {
+                const app = window.firebaseModules?.getApp?.(); // Try getting existing app
+                if (app) db = window.firebaseModules.getFirestore(app);
+            } catch(e){}
+
             return (
-                <div className="min-h-screen bg-gray-50 max-w-lg mx-auto shadow-2xl relative overflow-hidden flex flex-col">
-                    {/* Header */}
+                <div className="min-h-screen bg-gray-50 max-w-lg mx-auto shadow-2xl flex flex-col relative overflow-hidden">
                     <div className="bg-green-600 p-6 text-white text-center relative flex-shrink-0">
                         <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-                        <button onClick={() => setShowSettings(true)} className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/30 transition-all"><IconKey /></button>
-                        <h1 className="text-2xl font-bold relative z-10 flex items-center justify-center gap-2">
-                            <span className="w-6 h-6"><IconBrain /></span> AI Scanner
-                        </h1>
-                        <p className="text-green-100 text-sm mt-1 relative z-10 flex flex-col items-center">
-                            <span>{activeTab === 'scan' ? 'Scan Surat Jalan' : 'Riwayat Laporan'}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full mt-1 flex items-center gap-1 ${user ? 'bg-green-700' : 'bg-gray-700'}`}>
-                                <span className={`w-2 h-2 rounded-full ${user ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}></span>
-                                {user ? 'Connected' : 'Offline'}
-                            </span>
-                        </p>
+                        <button onClick={() => setShowSettings(true)} className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/30"><IconKey /></button>
+                        <h1 className="text-2xl font-bold relative z-10 flex items-center justify-center gap-2"><IconBrain /> AI Scanner</h1>
+                        <p className="text-green-100 text-xs mt-1 relative z-10">{provider === 'tesseract' ? 'Mode Offline' : (provider === 'gemini' ? 'Google Gemini' : 'OpenAI GPT')}</p>
                     </div>
 
-                    {/* Content Scrollable Area */}
                     <div className="flex-1 overflow-y-auto p-4">
                         {activeTab === 'scan' ? (
                             <ScannerView 
-                                user={user} db={db} appId={appId} 
-                                apiKey={apiKey} setApiKey={setApiKey} 
-                                showSettings={showSettings} setShowSettings={setShowSettings} 
-                                setActiveTab={setActiveTab} 
+                                user={user} db={db} appId={appId}
+                                apiKey={apiKey} setApiKey={setApiKey}
+                                provider={provider} setProvider={setProvider}
+                                showSettings={showSettings} setShowSettings={setShowSettings}
+                                setActiveTab={setActiveTab}
                             />
                         ) : (
                             <ReportsView db={db} user={user} appId={appId} />
                         )}
                     </div>
 
-                    {/* Bottom Nav */}
-                    <div className="flex-shrink-0 bg-white border-t border-gray-200 flex justify-around items-center p-3 pb-safe z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                        <button 
-                            onClick={() => setActiveTab('scan')} 
-                            className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all ${activeTab === 'scan' ? 'text-green-600 bg-green-50 font-bold' : 'text-gray-400 hover:text-gray-600'}`}
-                        >
-                            <IconHome />
-                            <span className="text-[10px]">Scanner</span>
+                    <div className="bg-white border-t p-3 flex justify-around shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
+                        <button onClick={() => setActiveTab('scan')} className={`flex flex-col items-center px-4 py-2 rounded-xl ${activeTab === 'scan' ? 'text-green-600 bg-green-50' : 'text-gray-400'}`}>
+                            <IconHome /><span className="text-[10px] font-bold">Scanner</span>
                         </button>
-                        <button 
-                            onClick={() => setActiveTab('report')} 
-                            className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all ${activeTab === 'report' ? 'text-green-600 bg-green-50 font-bold' : 'text-gray-400 hover:text-gray-600'}`}
-                        >
-                            <IconList />
-                            <span className="text-[10px]">Laporan</span>
+                        <button onClick={() => setActiveTab('report')} className={`flex flex-col items-center px-4 py-2 rounded-xl ${activeTab === 'report' ? 'text-green-600 bg-green-50' : 'text-gray-400'}`}>
+                            <IconList /><span className="text-[10px] font-bold">Laporan</span>
                         </button>
                     </div>
                 </div>
@@ -804,9 +585,6 @@
         } else if (window.ReactDOM) {
              const root = window.ReactDOM.createRoot(container);
              root.render(<ScannerApp />);
-        } else {
-             console.error("ReactDOM not found");
-             container.innerHTML = '<div class="p-4 text-red-600 font-bold">Error: Library React tidak termuat dengan benar. Silakan refresh halaman.</div>';
         }
     </script>
 </body>
