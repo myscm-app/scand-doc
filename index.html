@@ -68,6 +68,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
         
+        // Destructure Firebase modules from window
         const { 
             initializeApp, getAuth, signInAnonymously, signInWithCustomToken, 
             onAuthStateChanged, getFirestore, collection, addDoc, serverTimestamp, onSnapshot
@@ -371,7 +372,6 @@
                     // Clean Result
                     console.log("Raw Result:", resultText);
                     let clean = resultText.replace(/\n/g, ' ').trim();
-                    // Basic parsing logic similar to before
                     const sdoMatch = clean.match(/([S5]D[O0][\s\-_]*MK[I1l][\s\-_]*[A-Z0-9\-\/\s]{5,30})/i);
                     if (sdoMatch) {
                         clean = sdoMatch[1].replace(/\s+/g, '').toUpperCase();
@@ -381,7 +381,6 @@
                              if (prefix === 'SDOMKI') clean = `SDO-MKI-${suffix}`;
                         }
                     } else {
-                        // Fallback logic
                         const numMatch = clean.match(/([A-Z0-9\-\/]{5,})/i);
                         if(numMatch) clean = numMatch[1];
                     }
@@ -491,7 +490,41 @@
             );
         };
 
-        // --- Main App ---
+        // --- GLOBAL APP INITIALIZATION ---
+        let app, auth, db;
+        let appId = 'default-app-id';
+
+        try {
+            if (typeof __firebase_config !== 'undefined' && window.firebaseModules) {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'logistik-tracker-app';
+                app = window.firebaseModules.initializeApp(firebaseConfig);
+                auth = window.firebaseModules.getAuth(app);
+                db = window.firebaseModules.getFirestore(app);
+            } else if (window.firebaseModules) {
+                // --- KONFIGURASI FIREBASE MANUAL (SUDAH DIUPDATE) ---
+                const manualConfig = {
+                    apiKey: "AIzaSyD8695w0097awWGbd6jUSmWFBLr3J9HwOg",
+                    authDomain: "scan-spj.firebaseapp.com",
+                    projectId: "scan-spj",
+                    storageBucket: "scan-spj.firebasestorage.app",
+                    messagingSenderId: "391063588629",
+                    appId: "1:391063588629:web:c5c6ff03d247d51ed7e31c"
+                };
+
+                if (manualConfig.apiKey && manualConfig.apiKey !== "ISI_API_KEY_DISINI") {
+                    app = window.firebaseModules.initializeApp(manualConfig);
+                    auth = window.firebaseModules.getAuth(app);
+                    db = window.firebaseModules.getFirestore(app);
+                    appId = manualConfig.projectId; 
+                } else {
+                    console.warn("Firebase Config belum diisi. Aplikasi berjalan dalam Mode Offline.");
+                }
+            }
+        } catch (e) {
+            console.error("Firebase init error:", e);
+        }
+
         const ScannerApp = () => {
             const [activeTab, setActiveTab] = useState('scan');
             const [user, setUser] = useState(null);
@@ -513,8 +546,15 @@
                         app = window.firebaseModules.initializeApp(config);
                     } else if (window.firebaseModules) {
                         // Manual config fallback
-                        const manualConfig = { apiKey: "YOUR_API_KEY", authDomain: "logistik-tracker-app.firebaseapp.com", projectId: "logistik-tracker-app" }; 
-                        // Only init if real key provided, otherwise skip
+                        const manualConfig = {
+                            apiKey: "AIzaSyD8695w0097awWGbd6jUSmWFBLr3J9HwOg",
+                            authDomain: "scan-spj.firebaseapp.com",
+                            projectId: "scan-spj",
+                            storageBucket: "scan-spj.firebasestorage.app",
+                            messagingSenderId: "391063588629",
+                            appId: "1:391063588629:web:c5c6ff03d247d51ed7e31c"
+                        };
+                        
                         if(manualConfig.apiKey !== "YOUR_API_KEY") app = window.firebaseModules.initializeApp(manualConfig);
                     }
                     
