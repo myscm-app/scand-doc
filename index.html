@@ -598,6 +598,8 @@
             useEffect(() => {
                 if (manualSeq.length > 0) {
                     const mm = monthMap[data.bulan] || "01";
+                    // Tambahkan .slice(-2) setelah manualYear
+        const shortYear = manualYear.slice(-2);
                     setData(prev => ({ ...prev, noSuratJalan: `SDO-MKI-${mm}-${manualYear}-${manualSeq}` }));
                 }
             }, [manualSeq, manualYear, data.bulan]);
