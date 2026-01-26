@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SEKTE DELIVERY SCANNER</title>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -28,21 +27,16 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     
-    <!-- React & ReactDOM -->
     <script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
-    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- jsPDF (PDF Generator) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
-    <!-- JSZip & FileSaver -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
-    <!-- Tesseract.js -->
     <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
 
     <style>
@@ -102,7 +96,6 @@
         button, select, input { touch-action: manipulation; }
     </style>
     
-    <!-- FIREBASE MODULE IMPORTS -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
@@ -602,14 +595,16 @@
             const [manualSeq, setManualSeq] = useState('');
             const monthMap = { "Januari": "01", "Februari": "02", "Maret": "03", "April": "04", "Mei": "05", "Juni": "06", "Juli": "07", "Agustus": "08", "September": "09", "Oktober": "10", "November": "11", "Desember": "12" };
 
+            // === PERBAIKAN DI SINI: MENGAMBIL 2 DIGIT TERAKHIR TAHUN ===
             useEffect(() => {
                 if (manualSeq.length > 0) {
                     const mm = monthMap[data.bulan] || "01";
-                    // Tambahkan .slice(-2) setelah manualYear
-        const shortYear = manualYear.slice(-2);
-                    setData(prev => ({ ...prev, noSuratJalan: `SDO-MKI-${mm}-${manualYear}-${manualSeq}` }));
+                    // Tambahkan .slice(-2) setelah manualYear untuk mengambil 2 digit terakhir (misal 2026 jadi 26)
+                    const shortYear = manualYear.slice(-2);
+                    setData(prev => ({ ...prev, noSuratJalan: `SDO-MKI-${mm}-${shortYear}-${manualSeq}` }));
                 }
             }, [manualSeq, manualYear, data.bulan]);
+            // =============================================================
 
             const processImage = async (imgData) => {
                 if (provider !== 'tesseract' && !apiKey) { alert("API Key diperlukan!"); setShowSettings(true); return; }
