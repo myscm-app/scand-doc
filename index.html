@@ -159,7 +159,7 @@
         };
 
         // --- Helper Functions ---
-        const generatePDFDoc = (data, imageBase64) => {
+        const generatePDFDoc = (data, imageSource) => {
              if (!window.jspdf) return null;
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
@@ -202,8 +202,10 @@
             addField("Bulan", data.bulan);
             addField("Tanggal Scan", new Date().toLocaleDateString('id-ID'));
 
-            // Image
-            if (imageBase64) {
+            // Images Logic (Handle multiple)
+            const imgList = Array.isArray(imageSource) ? imageSource : (imageSource ? [imageSource] : []);
+            
+            if (imgList.length > 0) {
                 y += 10;
                 doc.setFont("helvetica", "bold");
                 doc.text("BUKTI FISIK", 20, y);
@@ -211,24 +213,28 @@
                 doc.line(20, y, 190, y);
                 y += 10;
 
-                const imgProps = doc.getImageProperties(imageBase64);
                 const pdfWidth = doc.internal.pageSize.getWidth();
                 const availableWidth = pdfWidth - 40;
-                const imgHeight = (imgProps.height * availableWidth) / imgProps.width;
-                
-                // Check if image needs new page
-                if (y + imgHeight > 280) {
-                    doc.addPage();
-                    y = 20;
-                }
 
-                doc.addImage(imageBase64, 'JPEG', 20, y, availableWidth, imgHeight);
+                imgList.forEach((imgBase64, index) => {
+                    const imgProps = doc.getImageProperties(imgBase64);
+                    const imgHeight = (imgProps.height * availableWidth) / imgProps.width;
+                    
+                    // Check if image needs new page
+                    if (y + imgHeight > 280) {
+                        doc.addPage();
+                        y = 20;
+                    }
+
+                    doc.addImage(imgBase64, 'JPEG', 20, y, availableWidth, imgHeight);
+                    y += imgHeight + 10; // Space between images
+                });
             }
             return doc;
         };
 
-        const createAndDownloadPDF = (data, imageBase64) => {
-            const doc = generatePDFDoc(data, imageBase64);
+        const createAndDownloadPDF = (data, imageSource) => {
+            const doc = generatePDFDoc(data, imageSource);
             if (!doc) {
                 alert("Library PDF belum siap.");
                 return;
@@ -469,7 +475,7 @@
                     let count = 0;
                     const targetLogs = selectionMode && selectedIds.size > 0 ? filteredLogs.filter(l => selectedIds.has(l.id)) : filteredLogs;
                     targetLogs.forEach((log, index) => {
-                        const doc = generatePDFDoc(log, log.imageBase64);
+                        const doc = generatePDFDoc(log, log.images || log.imageBase64);
                         if(doc) {
                             const fileName = log.noSuratJalan ? `${log.noSuratJalan.replace(/[^a-zA-Z0-9\-_]/g, '_')}.pdf` : `SJ_${index}.pdf`;
                             folder.file(fileName, doc.output('blob'));
@@ -551,6 +557,7 @@
                                     )}
                                     <div className="w-16 h-16 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0 border border-slate-200 flex items-center justify-center relative">
                                         {log.imageBase64 ? <img src={log.imageBase64} alt="Preview" className="w-full h-full object-cover transition-transform group-hover:scale-110"/> : <span className="text-[10px] text-slate-400">No IMG</span>}
+                                        {log.images && log.images.length > 1 && <div className="absolute top-1 right-1 bg-black/60 text-white text-[8px] px-1 rounded">+{log.images.length-1}</div>}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <h4 className="font-bold text-sm text-slate-800 truncate mb-1" title={log.noSuratJalan}>{log.noSuratJalan}</h4>
@@ -562,7 +569,7 @@
                                     </div>
                                     {!selectionMode && (
                                         <div className="flex flex-col gap-1">
-                                            <button onClick={(e) => { e.stopPropagation(); createAndDownloadPDF(log, log.imageBase64); }} className="p-2 text-white bg-emerald-500 rounded-lg shadow-sm hover:bg-emerald-600 transition-all" title="Download"><Icons.Download className="w-4 h-4" /></button>
+                                            <button onClick={(e) => { e.stopPropagation(); createAndDownloadPDF(log, log.images || log.imageBase64); }} className="p-2 text-white bg-emerald-500 rounded-lg shadow-sm hover:bg-emerald-600 transition-all" title="Download"><Icons.Download className="w-4 h-4" /></button>
                                             <div className="flex gap-1">
                                                 <button onClick={(e) => { e.stopPropagation(); initiateAuth({ type: 'edit', target: log }); }} className="p-2 text-slate-400 bg-slate-50 rounded-lg hover:text-blue-600 hover:bg-blue-50 transition-all" title="Edit"><Icons.Edit className="w-3 h-3" /></button>
                                                 <button onClick={(e) => { e.stopPropagation(); initiateAuth({ type: 'delete_one', target: log.id }); }} className="p-2 text-slate-400 bg-slate-50 rounded-lg hover:text-red-600 hover:bg-red-50 transition-all" title="Hapus"><Icons.Trash className="w-3 h-3" /></button>
@@ -578,7 +585,7 @@
         };
 
         const ScannerView = ({ user, db, appId, apiKey, setApiKey, provider, setProvider, showSettings, setShowSettings, setActiveTab, categories }) => {
-            const [image, setImage] = useState(null);
+            const [images, setImages] = useState([]);
             const [isProcessing, setIsProcessing] = useState(false);
             const [showCamera, setShowCamera] = useState(false);
             const [isSaving, setIsSaving] = useState(false);
@@ -668,13 +675,15 @@
                             };
                         });
                         
-                        const optImg = await compressImageForDB(image);
+                        // Compress all images
+                        const compressedImages = await Promise.all(images.map(img => compressImageForDB(img)));
                         
                         const rec = { 
                             ...data, 
                             userId: user.uid, 
                             createdAt: serverTimestamp(), 
-                            imageBase64: optImg 
+                            imageBase64: compressedImages[0], // Keep primary for thumbnail
+                            images: compressedImages 
                         };
                         
                         await Promise.all([
@@ -683,26 +692,32 @@
                         ]);
                         
                         alert("Berhasil! Data Tajam & Tersimpan di Cloud.");
-                        setImage(null); setData(prev => ({ ...prev, noSuratJalan: '' })); setManualSeq(''); setActiveTab('report');
+                        setImages([]); setData(prev => ({ ...prev, noSuratJalan: '' })); setManualSeq(''); setActiveTab('report');
                     } catch (e) {
                         console.error(e);
-                        if(confirm("Gagal upload Cloud (Koneksi lambat). Simpan PDF lokal?")) createAndDownloadPDF(data, image);
+                        if(confirm("Gagal upload Cloud (Koneksi lambat). Simpan PDF lokal?")) createAndDownloadPDF(data, images);
                     }
                 } else {
                     alert("Mode Offline: Simpan PDF di HP.");
-                    createAndDownloadPDF(data, image);
-                    setImage(null); setData(prev => ({ ...prev, noSuratJalan: '' })); setManualSeq('');
+                    createAndDownloadPDF(data, images);
+                    setImages([]); setData(prev => ({ ...prev, noSuratJalan: '' })); setManualSeq('');
                 }
                 setIsSaving(false);
             };
 
-            const handleInputChange = (field, value) => {
-                setData(prev => ({ ...prev, [field]: value }));
+            const removeImage = (indexToRemove) => {
+                setImages(prev => prev.filter((_, idx) => idx !== indexToRemove));
             };
 
             return (
                 <div className="space-y-6 pb-20">
-                    {showCamera && <CameraModal onCapture={(img) => { setImage(img); setShowCamera(false); processImage(img); }} onClose={() => setShowCamera(false)} />}
+                    {showCamera && <CameraModal onCapture={(img) => { 
+                        // If first image, process it. Always add to list.
+                        if (images.length === 0) processImage(img);
+                        setImages(prev => [...prev, img]);
+                        setShowCamera(false); 
+                    }} onClose={() => setShowCamera(false)} />}
+                    
                     {showSettings && (
                         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                             <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4 max-h-[80vh] overflow-y-auto">
@@ -731,59 +746,16 @@
                                         <span className="text-sm font-semibold text-slate-700">Status Penyimpanan</span>
                                         <button 
                                             onClick={() => {
-                                                const newState = !isCloudEnabled;
-                                                setIsCloudEnabled(newState);
+                                                const newState = !JSON.parse(localStorage.getItem('cloud_enabled') || 'true');
                                                 localStorage.setItem('cloud_enabled', newState);
                                                 alert("Perubahan status cloud memerlukan refresh halaman.");
                                                 window.location.reload();
                                             }}
-                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isCloudEnabled ? 'bg-green-500' : 'bg-slate-300'}`}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${JSON.parse(localStorage.getItem('cloud_enabled') || 'true') ? 'bg-green-500' : 'bg-slate-300'}`}
                                         >
-                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isCloudEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${JSON.parse(localStorage.getItem('cloud_enabled') || 'true') ? 'translate-x-6' : 'translate-x-1'}`} />
                                         </button>
                                     </div>
-
-                                    {isCloudEnabled && (
-                                        <div className="space-y-3">
-                                            <div className="text-[10px] text-blue-600 bg-blue-50 p-2 rounded border border-blue-100 mb-2">
-                                                Konfigurasi Default: <b>scan-doc-85b4d</b>
-                                            </div>
-                                            
-                                            <div className="space-y-2">
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">API Key</label>
-                                                    <input type="text" value={cloudConfig.apiKey} onChange={(e) => updateCloudConfig('apiKey', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">Auth Domain</label>
-                                                    <input type="text" value={cloudConfig.authDomain} onChange={(e) => updateCloudConfig('authDomain', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">Project ID</label>
-                                                    <input type="text" value={cloudConfig.projectId} onChange={(e) => updateCloudConfig('projectId', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">Storage Bucket</label>
-                                                    <input type="text" value={cloudConfig.storageBucket} onChange={(e) => updateCloudConfig('storageBucket', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">Messaging Sender ID</label>
-                                                    <input type="text" value={cloudConfig.messagingSenderId} onChange={(e) => updateCloudConfig('messagingSenderId', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">App ID</label>
-                                                    <input type="text" value={cloudConfig.appId} onChange={(e) => updateCloudConfig('appId', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                            </div>
-
-                                            <button 
-                                                onClick={resetCloudConfig}
-                                                className="w-full py-2 text-xs text-slate-500 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 mt-2"
-                                            >
-                                                Reset ke Default (scan-doc-85b4d)
-                                            </button>
-                                        </div>
-                                    )}
                                 </div>
 
                                 {/* CATEGORY MANAGEMENT SECTION */}
@@ -793,9 +765,10 @@
                                         <input type="text" id="newCatInput" placeholder="Kategori Baru..." className="flex-1 p-2 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-accent" />
                                         <button onClick={() => {
                                             const val = document.getElementById('newCatInput').value.toUpperCase();
-                                            if(val) {
-                                                addCategory(val);
-                                                document.getElementById('newCatInput').value = '';
+                                            if(val && !categories.includes(val)) {
+                                                const updated = [...categories, val];
+                                                localStorage.setItem('scanner_categories', JSON.stringify(updated));
+                                                window.location.reload(); // Simple reload to update state
                                             }
                                         }} className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg font-bold text-lg leading-none hover:bg-blue-200">+</button>
                                     </div>
@@ -803,7 +776,13 @@
                                         {categories.map(cat => (
                                             <span key={cat} className="text-xs bg-slate-100 px-3 py-1.5 rounded-full flex items-center gap-2 border border-slate-200 text-slate-600 font-medium">
                                                 {cat}
-                                                <button onClick={() => removeCategory(cat)} className="text-red-400 hover:text-red-600 font-bold bg-slate-200 w-4 h-4 rounded-full flex items-center justify-center leading-none">×</button>
+                                                <button onClick={() => {
+                                                    if (confirm(`Hapus kategori ${cat}?`)) {
+                                                        const updated = categories.filter(c => c !== cat);
+                                                        localStorage.setItem('scanner_categories', JSON.stringify(updated));
+                                                        window.location.reload();
+                                                    }
+                                                }} className="text-red-400 hover:text-red-600 font-bold bg-slate-200 w-4 h-4 rounded-full flex items-center justify-center leading-none">×</button>
                                             </span>
                                         ))}
                                     </div>
@@ -814,14 +793,7 @@
                                     <button onClick={() => { 
                                         localStorage.setItem('scanner_api_key', apiKey); 
                                         localStorage.setItem('scanner_provider', provider);
-                                        // Save Cloud Config
-                                        if (isCloudEnabled) {
-                                            localStorage.setItem('cloud_config', JSON.stringify(cloudConfig));
-                                            alert("Pengaturan disimpan. Halaman akan dimuat ulang untuk menerapkan konfigurasi Cloud baru.");
-                                            window.location.reload();
-                                        } else {
-                                            setShowSettings(false); 
-                                        }
+                                        setShowSettings(false); 
                                     }} className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-bold shadow-lg shadow-blue-500/30">Simpan</button>
                                 </div>
                             </div>
@@ -850,7 +822,7 @@
                     </div>
 
                     <div className="space-y-4">
-                        {!image ? (
+                        {images.length === 0 ? (
                             <button onClick={() => setShowCamera(true)} className="w-full h-48 border-2 border-dashed border-accent/40 bg-white/50 rounded-2xl flex flex-col items-center justify-center text-accent hover:bg-white hover:border-accent hover:shadow-xl hover:scale-[1.01] transition-all group">
                                 <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                                     <Icons.Camera className="w-8 h-8" />
@@ -859,10 +831,24 @@
                                 <span className="text-xs text-slate-400 mt-1 bg-slate-100 px-2 py-1 rounded-full">AI Powered: {provider === 'tesseract' ? 'Offline' : (provider === 'gemini' ? 'SEKTE DELIVERY' : 'OpenAI')}</span>
                             </button>
                         ) : (
-                            <div className="relative rounded-2xl overflow-hidden shadow-2xl ring-4 ring-white">
-                                <img src={image} className="w-full opacity-90" />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
-                                <button onClick={() => setImage(null)} className="absolute top-3 right-3 bg-white/20 backdrop-blur text-white p-2 rounded-full hover:bg-red-500 hover:text-white transition-all"><Icons.Refresh /></button>
+                            <div className="space-y-2">
+                                <div className="grid grid-cols-2 gap-4">
+                                    {images.map((img, idx) => (
+                                        <div key={idx} className="relative rounded-xl overflow-hidden shadow-md ring-2 ring-white aspect-[4/3] group">
+                                            <img src={img} className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors"></div>
+                                            <button onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-white text-red-500 p-1.5 rounded-full shadow-sm hover:bg-red-500 hover:text-white transition-all"><Icons.Trash className="w-3 h-3"/></button>
+                                            {idx === 0 && <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] font-bold text-center py-1">Utama (OCR)</div>}
+                                        </div>
+                                    ))}
+                                    <button onClick={() => setShowCamera(true)} className="flex flex-col items-center justify-center bg-white border-2 border-dashed border-slate-300 rounded-xl aspect-[4/3] text-slate-400 hover:bg-slate-50 hover:border-blue-400 hover:text-blue-500 transition-all">
+                                        <Icons.Plus className="w-8 h-8"/>
+                                        <span className="text-[10px] font-bold mt-1 uppercase tracking-wide">Tambah Foto</span>
+                                    </button>
+                                </div>
+                                <div className="text-right">
+                                    <button onClick={() => { setImages([]); setData(prev => ({...prev, noSuratJalan: ''})); }} className="text-xs text-red-500 font-medium hover:underline">Hapus Semua Foto</button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -903,7 +889,7 @@
                         </div>
                     </div>
 
-                    <button onClick={handleSave} disabled={!image || isProcessing || isSaving} className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold rounded-2xl shadow-xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.02] disabled:opacity-50 disabled:scale-100 transition-all flex items-center justify-center gap-2 text-lg">
+                    <button onClick={handleSave} disabled={images.length === 0 || isProcessing || isSaving} className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold rounded-2xl shadow-xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.02] disabled:opacity-50 disabled:scale-100 transition-all flex items-center justify-center gap-2 text-lg">
                         {isSaving ? <Icons.Loader /> : <Icons.Cloud />} Simpan Data
                     </button>
                 </div>
@@ -968,22 +954,6 @@
                 const saved = localStorage.getItem('scanner_categories');
                 return saved ? JSON.parse(saved) : ["MI", "PASIR", "SLAG"];
             });
-
-            const addCategory = (newCat) => {
-                if (newCat && !categories.includes(newCat)) {
-                    const updated = [...categories, newCat];
-                    setCategories(updated);
-                    localStorage.setItem('scanner_categories', JSON.stringify(updated));
-                }
-            };
-
-            const removeCategory = (catToRemove) => {
-                if (confirm(`Hapus kategori ${catToRemove}?`)) {
-                    const updated = categories.filter(c => c !== catToRemove);
-                    setCategories(updated);
-                    localStorage.setItem('scanner_categories', JSON.stringify(updated));
-                }
-            };
 
             // Cloud Config Handlers
             const updateCloudConfig = (field, value) => {
@@ -1069,132 +1039,6 @@
                         {/* Bottom Curve decoration (Optional, maybe smaller now) */}
                         <div className="h-4 bg-[#f0f9ff] rounded-t-[20px] -mb-1 relative z-10"></div>
                     </div>
-
-                    {/* Settings Modal */}
-                    {showSettings && (
-                        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4 max-h-[80vh] overflow-y-auto">
-                                <h3 className="font-bold text-lg text-slate-800 border-b pb-2">Pengaturan Scanner</h3>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Mesin Pembaca</label>
-                                    <select value={provider} onChange={(e) => setProvider(e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50">
-                                        <option value="gemini">SEKTE DELIVERY (Gratis/Cepat)</option>
-                                        <option value="openai">OpenAI GPT-4o (Berbayar)</option>
-                                        <option value="tesseract">Offline (Tanpa Internet)</option>
-                                    </select>
-                                </div>
-                                {provider !== 'tesseract' && (
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">API Key</label>
-                                        <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 font-mono text-sm" placeholder="Tempel API Key disini..." />
-                                        <p className="text-[10px] text-slate-400 mt-1">Key tersimpan aman di browser Anda.</p>
-                                    </div>
-                                )}
-
-                                {/* CLOUD STORAGE SETTINGS SECTION */}
-                                <div className="border-t pt-4">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Penyimpanan Cloud (Firebase)</label>
-                                    
-                                    <div className="flex items-center justify-between mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                        <span className="text-sm font-semibold text-slate-700">Status Penyimpanan</span>
-                                        <button 
-                                            onClick={() => {
-                                                const newState = !isCloudEnabled;
-                                                setIsCloudEnabled(newState);
-                                                localStorage.setItem('cloud_enabled', newState);
-                                                alert("Perubahan status cloud memerlukan refresh halaman.");
-                                                window.location.reload();
-                                            }}
-                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isCloudEnabled ? 'bg-green-500' : 'bg-slate-300'}`}
-                                        >
-                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isCloudEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                                        </button>
-                                    </div>
-
-                                    {isCloudEnabled && (
-                                        <div className="space-y-3">
-                                            <div className="text-[10px] text-blue-600 bg-blue-50 p-2 rounded border border-blue-100 mb-2">
-                                                Konfigurasi Default: <b>scan-doc-85b4d</b>
-                                            </div>
-                                            
-                                            <div className="space-y-2">
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">API Key</label>
-                                                    <input type="text" value={cloudConfig.apiKey} onChange={(e) => updateCloudConfig('apiKey', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">Auth Domain</label>
-                                                    <input type="text" value={cloudConfig.authDomain} onChange={(e) => updateCloudConfig('authDomain', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">Project ID</label>
-                                                    <input type="text" value={cloudConfig.projectId} onChange={(e) => updateCloudConfig('projectId', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">Storage Bucket</label>
-                                                    <input type="text" value={cloudConfig.storageBucket} onChange={(e) => updateCloudConfig('storageBucket', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">Messaging Sender ID</label>
-                                                    <input type="text" value={cloudConfig.messagingSenderId} onChange={(e) => updateCloudConfig('messagingSenderId', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400">App ID</label>
-                                                    <input type="text" value={cloudConfig.appId} onChange={(e) => updateCloudConfig('appId', e.target.value)} className="w-full p-2 text-xs border rounded bg-white" />
-                                                </div>
-                                            </div>
-
-                                            <button 
-                                                onClick={resetCloudConfig}
-                                                className="w-full py-2 text-xs text-slate-500 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 mt-2"
-                                            >
-                                                Reset ke Default (scan-doc-85b4d)
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* CATEGORY MANAGEMENT SECTION */}
-                                <div className="border-t pt-4">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Manajemen Kategori</label>
-                                    <div className="flex gap-2 mb-3">
-                                        <input type="text" id="newCatInput" placeholder="Kategori Baru..." className="flex-1 p-2 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-accent" />
-                                        <button onClick={() => {
-                                            const val = document.getElementById('newCatInput').value.toUpperCase();
-                                            if(val) {
-                                                addCategory(val);
-                                                document.getElementById('newCatInput').value = '';
-                                            }
-                                        }} className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg font-bold text-lg leading-none hover:bg-blue-200">+</button>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {categories.map(cat => (
-                                            <span key={cat} className="text-xs bg-slate-100 px-3 py-1.5 rounded-full flex items-center gap-2 border border-slate-200 text-slate-600 font-medium">
-                                                {cat}
-                                                <button onClick={() => removeCategory(cat)} className="text-red-400 hover:text-red-600 font-bold bg-slate-200 w-4 h-4 rounded-full flex items-center justify-center leading-none">×</button>
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="flex justify-end gap-3 pt-2 border-t mt-2">
-                                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-medium">Tutup</button>
-                                    <button onClick={() => { 
-                                        localStorage.setItem('scanner_api_key', apiKey); 
-                                        localStorage.setItem('scanner_provider', provider);
-                                        // Save Cloud Config
-                                        if (isCloudEnabled) {
-                                            localStorage.setItem('cloud_config', JSON.stringify(cloudConfig));
-                                            alert("Pengaturan disimpan. Halaman akan dimuat ulang untuk menerapkan konfigurasi Cloud baru.");
-                                            window.location.reload();
-                                        } else {
-                                            setShowSettings(false); 
-                                        }
-                                    }} className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-bold shadow-lg shadow-blue-500/30">Simpan</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
                     {/* Main Content */}
                     <div className="flex-1 overflow-y-auto p-4 bg-[#f0f9ff]">
