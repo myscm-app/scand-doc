@@ -247,7 +247,7 @@
 
             const handleSubmit = (e) => {
                 e.preventDefault();
-                if (username === 'delivery' && password === 'tanzela0308') {
+                if (username === 'delivery' && password === 'mitra01') {
                     onSuccess();
                 } else {
                     setError('Username atau Password salah!');
@@ -598,7 +598,7 @@
             useEffect(() => {
                 if (manualSeq.length > 0) {
                     const mm = monthMap[data.bulan] || "01";
-                    setData(prev => ({ ...prev, noSuratJalan: `SDO-MKI/${mm}/${manualYear}/${manualSeq}` }));
+                    setData(prev => ({ ...prev, noSuratJalan: `SDO-MKI-${mm}-${manualYear}-${manualSeq}` }));
                 }
             }, [manualSeq, manualYear, data.bulan]);
 
